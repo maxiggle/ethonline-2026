@@ -22,6 +22,7 @@ contract Chapter2Guard is ITransactionGuard {
     mapping(uint256 => uint256) public dailySpent;
     mapping(address => bool) public isApprovedRecipient;
     mapping(address => bool) public isApprovedToken;
+    mapping(uint256 => bool) public usedActionNonces;
 
     struct TreasuryActionApproval {
         string actionId;
@@ -63,6 +64,7 @@ contract Chapter2Guard is ITransactionGuard {
     error ExceedsDailyLimit(uint256 currentDaily, uint256 maxDaily);
     error InvalidSignature();
     error SignatureExpired(uint256 deadline, uint256 currentTimestamp);
+    error NonceAlreadyUsed(uint256 nonce);
     error UnauthorizedCaller(address caller);
     error InvalidData();
 
@@ -187,6 +189,9 @@ contract Chapter2Guard is ITransactionGuard {
         if (approval.deadline < block.timestamp) {
             revert SignatureExpired(approval.deadline, block.timestamp);
         }
+        if (usedActionNonces[approval.nonce]) {
+            revert NonceAlreadyUsed(approval.nonce);
+        }
         if (
             approval.recipient != recipient ||
             approval.token != token ||
@@ -219,6 +224,7 @@ contract Chapter2Guard is ITransactionGuard {
             revert InvalidSignature();
         }
 
+        usedActionNonces[approval.nonce] = true;
         emit EscalatedActionApproved(
             approval.actionId,
             recipient,

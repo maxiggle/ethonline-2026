@@ -304,4 +304,79 @@ contract Chapter2GuardTest is Test {
             signaturePayload
         );
     }
+
+    function test_RevertWhen_EscalatedPaymentReplaysNonce() public {
+        uint256 suspiciousAmount = 850 * 1e6;
+        bytes memory transferData = abi.encodeWithSelector(
+            IERC20.transfer.selector,
+            alchemyRecipient,
+            suspiciousAmount
+        );
+
+        Chapter2Guard.TreasuryActionApproval memory approval = Chapter2Guard.TreasuryActionApproval({
+            actionId: "act_alchemy_replay_test",
+            agent: agent,
+            recipient: alchemyRecipient,
+            token: address(0x999),
+            amount: suspiciousAmount,
+            nonce: 202,
+            deadline: block.timestamp + 1 hours,
+            mandateHash: keccak256("MANDATE_V1"),
+            riskScore: 78
+        });
+
+        bytes32 structHash = keccak256(
+            abi.encode(
+                guard.ACTION_APPROVAL_TYPEHASH(),
+                keccak256(bytes(approval.actionId)),
+                approval.agent,
+                approval.recipient,
+                approval.token,
+                approval.amount,
+                approval.nonce,
+                approval.deadline,
+                approval.mandateHash,
+                approval.riskScore
+            )
+        );
+
+        bytes32 digest = keccak256(
+            abi.encodePacked("\x19\x01", guard.DOMAIN_SEPARATOR(), structHash)
+        );
+
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(humanPrivateKey, digest);
+        bytes memory signaturePayload = abi.encode(approval, abi.encodePacked(r, s, v));
+
+        vm.prank(agent);
+        bool firstExecution = safe.execTransaction(
+            address(0x999),
+            0,
+            transferData,
+            0,
+            0,
+            0,
+            0,
+            address(0),
+            payable(address(0)),
+            signaturePayload
+        );
+        assertTrue(firstExecution);
+
+        vm.prank(agent);
+        vm.expectRevert(
+            abi.encodeWithSelector(Chapter2Guard.NonceAlreadyUsed.selector, approval.nonce)
+        );
+        safe.execTransaction(
+            address(0x999),
+            0,
+            transferData,
+            0,
+            0,
+            0,
+            0,
+            address(0),
+            payable(address(0)),
+            signaturePayload
+        );
+    }
 }

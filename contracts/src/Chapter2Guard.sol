@@ -6,6 +6,12 @@ import {ITransactionGuard} from "./interfaces/ITransactionGuard.sol";
 contract Chapter2Guard is ITransactionGuard {
     bytes4 private constant ERC20_TRANSFER_SELECTOR = 0xa9059cbb;
 
+    bytes32 public immutable DOMAIN_SEPARATOR;
+    bytes32 public constant ACTION_APPROVAL_TYPEHASH =
+        keccak256(
+            "TreasuryActionApproval(string actionId,address agent,address recipient,address token,uint256 amount,uint256 nonce,uint256 deadline,bytes32 mandateHash,uint8 riskScore)"
+        );
+
     address public owner;
     address public safeAddress;
     address public autonomousAgent;
@@ -15,6 +21,19 @@ contract Chapter2Guard is ITransactionGuard {
 
     mapping(uint256 => uint256) public dailySpent;
     mapping(address => bool) public isApprovedRecipient;
+    mapping(address => bool) public isApprovedToken;
+
+    struct TreasuryActionApproval {
+        string actionId;
+        address agent;
+        address recipient;
+        address token;
+        uint256 amount;
+        uint256 nonce;
+        uint256 deadline;
+        bytes32 mandateHash;
+        uint8 riskScore;
+    }
 
     event AutonomousActionExecuted(
         address indexed agent,
@@ -24,12 +43,14 @@ contract Chapter2Guard is ITransactionGuard {
         uint256 dailySpentTotal
     );
     event RecipientStatusUpdated(address indexed recipient, bool approved);
+    event TokenStatusUpdated(address indexed token, bool approved);
     event MaxAutonomousAmountUpdated(uint256 maxLimit);
     event DailyAutonomousLimitUpdated(uint256 dailyLimit);
 
     error OnlyOwner();
     error OnlySafe();
     error RecipientNotApproved(address recipient);
+    error TokenNotApproved(address token);
     error ExceedsAutonomousLimit(uint256 requested, uint256 maxLimit);
     error ExceedsDailyLimit(uint256 currentDaily, uint256 maxDaily);
     error InvalidData();
@@ -58,6 +79,18 @@ contract Chapter2Guard is ITransactionGuard {
         humanSigner = _humanSigner;
         maxAutonomousAmount = _maxAutonomousAmount;
         dailyAutonomousLimit = _dailyAutonomousLimit;
+
+        DOMAIN_SEPARATOR = keccak256(
+            abi.encode(
+                keccak256(
+                    "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"
+                ),
+                keccak256(bytes("Chapter2")),
+                keccak256(bytes("1")),
+                block.chainid,
+                address(this)
+            )
+        );
     }
 
     function checkTransaction(
@@ -83,6 +116,9 @@ contract Chapter2Guard is ITransactionGuard {
 
         if (data.length >= 68 && bytes4(data) == ERC20_TRANSFER_SELECTOR) {
             token = to;
+            if (!isApprovedToken[token]) {
+                revert TokenNotApproved(token);
+            }
             (recipient, amount) = abi.decode(_slice(data, 4, 64), (address, uint256));
         } else if (value > 0 && data.length == 0) {
             token = address(0);
@@ -118,6 +154,11 @@ contract Chapter2Guard is ITransactionGuard {
     function setApprovedRecipient(address recipient, bool approved) external onlyOwner {
         isApprovedRecipient[recipient] = approved;
         emit RecipientStatusUpdated(recipient, approved);
+    }
+
+    function setApprovedToken(address token, bool approved) external onlyOwner {
+        isApprovedToken[token] = approved;
+        emit TokenStatusUpdated(token, approved);
     }
 
     function updateMandateLimits(uint256 _maxPerTx, uint256 _dailyLimit) external onlyOwner {

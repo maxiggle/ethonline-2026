@@ -24,6 +24,9 @@ contract Chapter2GuardTest is Test {
 
         vm.prank(humanOwner);
         guard.setApprovedRecipient(alchemyRecipient, true);
+
+        vm.prank(humanOwner);
+        guard.setApprovedToken(address(0x999), true);
     }
 
     function test_RevertWhen_RecipientNotApproved() public {

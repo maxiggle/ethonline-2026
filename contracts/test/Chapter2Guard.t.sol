@@ -73,4 +73,52 @@ contract Chapter2GuardTest is Test {
         );
         assertTrue(success);
     }
+
+    function test_RevertWhen_AutonomousPaymentExceedsLimit() public {
+        bytes memory transferData = abi.encodeWithSelector(
+            IERC20.transfer.selector,
+            alchemyRecipient,
+            850 * 1e6
+        );
+
+        vm.prank(agent);
+        vm.expectRevert(
+            abi.encodeWithSelector(Chapter2Guard.ExceedsAutonomousLimit.selector, 850 * 1e6, 100 * 1e6)
+        );
+        safe.execTransaction(
+            address(0x999),
+            0,
+            transferData,
+            0,
+            0,
+            0,
+            0,
+            address(0),
+            payable(address(0)),
+            ""
+        );
+    }
+
+    function test_AllowWhen_OwnerBypassesAutonomousLimit() public {
+        bytes memory transferData = abi.encodeWithSelector(
+            IERC20.transfer.selector,
+            alchemyRecipient,
+            5_000 * 1e6
+        );
+
+        vm.prank(humanOwner);
+        bool success = safe.execTransaction(
+            address(0x999),
+            0,
+            transferData,
+            0,
+            0,
+            0,
+            0,
+            address(0),
+            payable(address(0)),
+            ""
+        );
+        assertTrue(success);
+    }
 }

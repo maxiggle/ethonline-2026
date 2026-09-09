@@ -42,6 +42,14 @@ contract Chapter2Guard is ITransactionGuard {
         uint256 amount,
         uint256 dailySpentTotal
     );
+    event EscalatedActionApproved(
+        string actionId,
+        address indexed recipient,
+        address indexed token,
+        uint256 amount,
+        address indexed signer,
+        uint256 nonce
+    );
     event RecipientStatusUpdated(address indexed recipient, bool approved);
     event TokenStatusUpdated(address indexed token, bool approved);
     event MaxAutonomousAmountUpdated(uint256 maxLimit);
@@ -53,6 +61,9 @@ contract Chapter2Guard is ITransactionGuard {
     error TokenNotApproved(address token);
     error ExceedsAutonomousLimit(uint256 requested, uint256 maxLimit);
     error ExceedsDailyLimit(uint256 currentDaily, uint256 maxDaily);
+    error InvalidSignature();
+    error SignatureExpired(uint256 deadline, uint256 currentTimestamp);
+    error UnauthorizedCaller(address caller);
     error InvalidData();
 
     modifier onlyOwner() {
@@ -103,7 +114,7 @@ contract Chapter2Guard is ITransactionGuard {
         uint256,
         address,
         address payable,
-        bytes memory,
+        bytes memory signatures,
         address msgSender
     ) external virtual override onlySafe {
         if (msgSender == owner) {
@@ -133,23 +144,118 @@ contract Chapter2Guard is ITransactionGuard {
         }
 
         if (msgSender == autonomousAgent) {
-            if (amount > maxAutonomousAmount) {
+            if (amount <= maxAutonomousAmount) {
+                uint256 dayId = block.timestamp / 1 days;
+                uint256 newDailyTotal = dailySpent[dayId] + amount;
+
+                if (newDailyTotal > dailyAutonomousLimit) {
+                    revert ExceedsDailyLimit(newDailyTotal, dailyAutonomousLimit);
+                }
+
+                dailySpent[dayId] = newDailyTotal;
+                emit AutonomousActionExecuted(autonomousAgent, recipient, token, amount, newDailyTotal);
+                return;
+            }
+
+            if (signatures.length == 0) {
                 revert ExceedsAutonomousLimit(amount, maxAutonomousAmount);
             }
 
-            uint256 dayId = block.timestamp / 1 days;
-            uint256 newDailyTotal = dailySpent[dayId] + amount;
-
-            if (newDailyTotal > dailyAutonomousLimit) {
-                revert ExceedsDailyLimit(newDailyTotal, dailyAutonomousLimit);
+            _verifyEscalatedSignature(signatures, recipient, token, amount);
+        } else {
+            if (signatures.length > 0) {
+                _verifyEscalatedSignature(signatures, recipient, token, amount);
+            } else {
+                revert UnauthorizedCaller(msgSender);
             }
-
-            dailySpent[dayId] = newDailyTotal;
-            emit AutonomousActionExecuted(autonomousAgent, recipient, token, amount, newDailyTotal);
         }
     }
 
     function checkAfterExecution(bytes32, bool) external virtual override onlySafe {}
+
+    function _verifyEscalatedSignature(
+        bytes memory signatures,
+        address recipient,
+        address token,
+        uint256 amount
+    ) internal {
+        (TreasuryActionApproval memory approval, bytes memory sig) = abi.decode(
+            signatures,
+            (TreasuryActionApproval, bytes)
+        );
+
+        if (approval.deadline < block.timestamp) {
+            revert SignatureExpired(approval.deadline, block.timestamp);
+        }
+        if (
+            approval.recipient != recipient ||
+            approval.token != token ||
+            approval.amount != amount
+        ) {
+            revert InvalidData();
+        }
+
+        bytes32 structHash = keccak256(
+            abi.encode(
+                ACTION_APPROVAL_TYPEHASH,
+                keccak256(bytes(approval.actionId)),
+                approval.agent,
+                approval.recipient,
+                approval.token,
+                approval.amount,
+                approval.nonce,
+                approval.deadline,
+                approval.mandateHash,
+                approval.riskScore
+            )
+        );
+
+        bytes32 digest = keccak256(
+            abi.encodePacked("\x19\x01", DOMAIN_SEPARATOR, structHash)
+        );
+        address recovered = _recoverSigner(digest, sig);
+
+        if (recovered != humanSigner) {
+            revert InvalidSignature();
+        }
+
+        emit EscalatedActionApproved(
+            approval.actionId,
+            recipient,
+            token,
+            amount,
+            recovered,
+            approval.nonce
+        );
+    }
+
+    function _recoverSigner(
+        bytes32 digest,
+        bytes memory sig
+    ) internal pure returns (address) {
+        if (sig.length != 65) {
+            revert InvalidSignature();
+        }
+        bytes32 r;
+        bytes32 s;
+        uint8 v;
+        assembly {
+            r := mload(add(sig, 32))
+            s := mload(add(sig, 64))
+            v := byte(0, mload(add(sig, 96)))
+        }
+        if (v < 27) {
+            v += 27;
+        }
+        if (v != 27 && v != 28) {
+            revert InvalidSignature();
+        }
+        address signer = ecrecover(digest, v, r, s);
+        if (signer == address(0)) {
+            revert InvalidSignature();
+        }
+        return signer;
+    }
 
     function setApprovedRecipient(address recipient, bool approved) external onlyOwner {
         isApprovedRecipient[recipient] = approved;

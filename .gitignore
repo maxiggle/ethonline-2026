@@ -1,0 +1,42 @@
+# Agent and Local Rules
+.agents/
+docs/rules/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Foundry
+contracts/out/
+contracts/cache/
+
+# Node / NestJS
+node_modules/
+dist/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Flutter / Dart
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+build/
+*.mode1v3
+*.mode2v3
+*.normal
+*.pbxuser
+*.perspectivev3
+*.xcuserstate
+project.xcworkspace
+xcuserdata
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# Environment Variables
+.env
+.env.*
+!.env.example

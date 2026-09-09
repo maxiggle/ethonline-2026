@@ -17,7 +17,7 @@ contract Chapter2GuardTest is Test {
 
     function setUp() public {
         safe = new MockSafe(humanOwner);
-        guard = new Chapter2Guard(humanOwner, address(safe), agent, humanOwner);
+        guard = new Chapter2Guard(humanOwner, address(safe), agent, humanOwner, 100 * 1e6);
 
         vm.prank(humanOwner);
         safe.setGuard(address(guard));

@@ -10,14 +10,17 @@ contract Chapter2Guard is ITransactionGuard {
     address public safeAddress;
     address public autonomousAgent;
     address public humanSigner;
+    uint256 public maxAutonomousAmount;
 
     mapping(address => bool) public isApprovedRecipient;
 
     event RecipientStatusUpdated(address indexed recipient, bool approved);
+    event MaxAutonomousAmountUpdated(uint256 maxLimit);
 
     error OnlyOwner();
     error OnlySafe();
     error RecipientNotApproved(address recipient);
+    error ExceedsAutonomousLimit(uint256 requested, uint256 maxLimit);
     error InvalidData();
 
     modifier onlyOwner() {
@@ -34,12 +37,14 @@ contract Chapter2Guard is ITransactionGuard {
         address _owner,
         address _safeAddress,
         address _autonomousAgent,
-        address _humanSigner
+        address _humanSigner,
+        uint256 _maxAutonomousAmount
     ) {
         owner = _owner;
         safeAddress = _safeAddress;
         autonomousAgent = _autonomousAgent;
         humanSigner = _humanSigner;
+        maxAutonomousAmount = _maxAutonomousAmount;
     }
 
     function checkTransaction(
@@ -60,17 +65,23 @@ contract Chapter2Guard is ITransactionGuard {
         }
 
         address recipient;
+        uint256 amount;
 
         if (data.length >= 68 && bytes4(data) == ERC20_TRANSFER_SELECTOR) {
-            (recipient, ) = abi.decode(_slice(data, 4, 64), (address, uint256));
+            (recipient, amount) = abi.decode(_slice(data, 4, 64), (address, uint256));
         } else if (value > 0 && data.length == 0) {
             recipient = to;
+            amount = value;
         } else {
             revert InvalidData();
         }
 
         if (!isApprovedRecipient[recipient]) {
             revert RecipientNotApproved(recipient);
+        }
+
+        if (msgSender == autonomousAgent && amount > maxAutonomousAmount) {
+            revert ExceedsAutonomousLimit(amount, maxAutonomousAmount);
         }
     }
 
@@ -79,6 +90,11 @@ contract Chapter2Guard is ITransactionGuard {
     function setApprovedRecipient(address recipient, bool approved) external onlyOwner {
         isApprovedRecipient[recipient] = approved;
         emit RecipientStatusUpdated(recipient, approved);
+    }
+
+    function updateMaxAutonomousAmount(uint256 _maxLimit) external onlyOwner {
+        maxAutonomousAmount = _maxLimit;
+        emit MaxAutonomousAmountUpdated(_maxLimit);
     }
 
     function setAutonomousAgent(address _agent) external onlyOwner {

@@ -10,12 +10,14 @@ contract Chapter2GuardTest is Test {
     Chapter2Guard public guard;
     MockSafe public safe;
 
-    address internal humanOwner = address(0x1);
+    uint256 internal humanPrivateKey = 0xA11CE;
+    address internal humanOwner;
     address internal agent = address(0x2);
     address internal alchemyRecipient = address(uint160(0x41C4E));
     address internal unknownAttacker = address(uint160(0x8F0000000000000000000000000000000000072A));
 
     function setUp() public {
+        humanOwner = vm.addr(humanPrivateKey);
         safe = new MockSafe(humanOwner);
         guard = new Chapter2Guard(humanOwner, address(safe), agent, humanOwner, 100 * 1e6, 500 * 1e6);
 
@@ -184,5 +186,122 @@ contract Chapter2GuardTest is Test {
             ""
         );
         assertTrue(successAfterWarp);
+    }
+
+    function test_AllowWhen_EscalatedPaymentSignedByHumanLedger() public {
+        uint256 suspiciousAmount = 850 * 1e6;
+        bytes memory transferData = abi.encodeWithSelector(
+            IERC20.transfer.selector,
+            alchemyRecipient,
+            suspiciousAmount
+        );
+
+        Chapter2Guard.TreasuryActionApproval memory approval = Chapter2Guard.TreasuryActionApproval({
+            actionId: "act_alchemy_annual_renewal_001",
+            agent: agent,
+            recipient: alchemyRecipient,
+            token: address(0x999),
+            amount: suspiciousAmount,
+            nonce: 101,
+            deadline: block.timestamp + 1 hours,
+            mandateHash: keccak256("MANDATE_V1"),
+            riskScore: 78
+        });
+
+        bytes32 structHash = keccak256(
+            abi.encode(
+                guard.ACTION_APPROVAL_TYPEHASH(),
+                keccak256(bytes(approval.actionId)),
+                approval.agent,
+                approval.recipient,
+                approval.token,
+                approval.amount,
+                approval.nonce,
+                approval.deadline,
+                approval.mandateHash,
+                approval.riskScore
+            )
+        );
+
+        bytes32 digest = keccak256(
+            abi.encodePacked("\x19\x01", guard.DOMAIN_SEPARATOR(), structHash)
+        );
+
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(humanPrivateKey, digest);
+        bytes memory signaturePayload = abi.encode(approval, abi.encodePacked(r, s, v));
+
+        vm.prank(agent);
+        bool success = safe.execTransaction(
+            address(0x999),
+            0,
+            transferData,
+            0,
+            0,
+            0,
+            0,
+            address(0),
+            payable(address(0)),
+            signaturePayload
+        );
+        assertTrue(success);
+    }
+
+    function test_RevertWhen_EscalatedPaymentHasInvalidSigner() public {
+        uint256 suspiciousAmount = 850 * 1e6;
+        bytes memory transferData = abi.encodeWithSelector(
+            IERC20.transfer.selector,
+            alchemyRecipient,
+            suspiciousAmount
+        );
+
+        Chapter2Guard.TreasuryActionApproval memory approval = Chapter2Guard.TreasuryActionApproval({
+            actionId: "act_fraud_attempt",
+            agent: agent,
+            recipient: alchemyRecipient,
+            token: address(0x999),
+            amount: suspiciousAmount,
+            nonce: 102,
+            deadline: block.timestamp + 1 hours,
+            mandateHash: keccak256("MANDATE_V1"),
+            riskScore: 78
+        });
+
+        bytes32 structHash = keccak256(
+            abi.encode(
+                guard.ACTION_APPROVAL_TYPEHASH(),
+                keccak256(bytes(approval.actionId)),
+                approval.agent,
+                approval.recipient,
+                approval.token,
+                approval.amount,
+                approval.nonce,
+                approval.deadline,
+                approval.mandateHash,
+                approval.riskScore
+            )
+        );
+
+        bytes32 digest = keccak256(
+            abi.encodePacked("\x19\x01", guard.DOMAIN_SEPARATOR(), structHash)
+        );
+
+        uint256 unauthorizedKey = 0xDEAD;
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(unauthorizedKey, digest);
+        bytes memory signaturePayload = abi.encode(approval, abi.encodePacked(r, s, v));
+
+        vm.prank(agent);
+        vm.expectRevert(Chapter2Guard.InvalidSignature.selector);
+        safe.execTransaction(
+            address(0x999),
+            0,
+            transferData,
+            0,
+            0,
+            0,
+            0,
+            address(0),
+            payable(address(0)),
+            signaturePayload
+        );
     }
 }

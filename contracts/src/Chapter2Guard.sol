@@ -11,16 +11,27 @@ contract Chapter2Guard is ITransactionGuard {
     address public autonomousAgent;
     address public humanSigner;
     uint256 public maxAutonomousAmount;
+    uint256 public dailyAutonomousLimit;
 
+    mapping(uint256 => uint256) public dailySpent;
     mapping(address => bool) public isApprovedRecipient;
 
+    event AutonomousActionExecuted(
+        address indexed agent,
+        address indexed recipient,
+        address indexed token,
+        uint256 amount,
+        uint256 dailySpentTotal
+    );
     event RecipientStatusUpdated(address indexed recipient, bool approved);
     event MaxAutonomousAmountUpdated(uint256 maxLimit);
+    event DailyAutonomousLimitUpdated(uint256 dailyLimit);
 
     error OnlyOwner();
     error OnlySafe();
     error RecipientNotApproved(address recipient);
     error ExceedsAutonomousLimit(uint256 requested, uint256 maxLimit);
+    error ExceedsDailyLimit(uint256 currentDaily, uint256 maxDaily);
     error InvalidData();
 
     modifier onlyOwner() {
@@ -38,13 +49,15 @@ contract Chapter2Guard is ITransactionGuard {
         address _safeAddress,
         address _autonomousAgent,
         address _humanSigner,
-        uint256 _maxAutonomousAmount
+        uint256 _maxAutonomousAmount,
+        uint256 _dailyAutonomousLimit
     ) {
         owner = _owner;
         safeAddress = _safeAddress;
         autonomousAgent = _autonomousAgent;
         humanSigner = _humanSigner;
         maxAutonomousAmount = _maxAutonomousAmount;
+        dailyAutonomousLimit = _dailyAutonomousLimit;
     }
 
     function checkTransaction(
@@ -66,10 +79,13 @@ contract Chapter2Guard is ITransactionGuard {
 
         address recipient;
         uint256 amount;
+        address token;
 
         if (data.length >= 68 && bytes4(data) == ERC20_TRANSFER_SELECTOR) {
+            token = to;
             (recipient, amount) = abi.decode(_slice(data, 4, 64), (address, uint256));
         } else if (value > 0 && data.length == 0) {
+            token = address(0);
             recipient = to;
             amount = value;
         } else {
@@ -80,8 +96,20 @@ contract Chapter2Guard is ITransactionGuard {
             revert RecipientNotApproved(recipient);
         }
 
-        if (msgSender == autonomousAgent && amount > maxAutonomousAmount) {
-            revert ExceedsAutonomousLimit(amount, maxAutonomousAmount);
+        if (msgSender == autonomousAgent) {
+            if (amount > maxAutonomousAmount) {
+                revert ExceedsAutonomousLimit(amount, maxAutonomousAmount);
+            }
+
+            uint256 dayId = block.timestamp / 1 days;
+            uint256 newDailyTotal = dailySpent[dayId] + amount;
+
+            if (newDailyTotal > dailyAutonomousLimit) {
+                revert ExceedsDailyLimit(newDailyTotal, dailyAutonomousLimit);
+            }
+
+            dailySpent[dayId] = newDailyTotal;
+            emit AutonomousActionExecuted(autonomousAgent, recipient, token, amount, newDailyTotal);
         }
     }
 
@@ -92,9 +120,11 @@ contract Chapter2Guard is ITransactionGuard {
         emit RecipientStatusUpdated(recipient, approved);
     }
 
-    function updateMaxAutonomousAmount(uint256 _maxLimit) external onlyOwner {
-        maxAutonomousAmount = _maxLimit;
-        emit MaxAutonomousAmountUpdated(_maxLimit);
+    function updateMandateLimits(uint256 _maxPerTx, uint256 _dailyLimit) external onlyOwner {
+        maxAutonomousAmount = _maxPerTx;
+        dailyAutonomousLimit = _dailyLimit;
+        emit MaxAutonomousAmountUpdated(_maxPerTx);
+        emit DailyAutonomousLimitUpdated(_dailyLimit);
     }
 
     function setAutonomousAgent(address _agent) external onlyOwner {
@@ -103,6 +133,15 @@ contract Chapter2Guard is ITransactionGuard {
 
     function setHumanSigner(address _signer) external onlyOwner {
         humanSigner = _signer;
+    }
+
+    function getRemainingDailyBudget() external view returns (uint256) {
+        uint256 dayId = block.timestamp / 1 days;
+        uint256 spent = dailySpent[dayId];
+        if (spent >= dailyAutonomousLimit) {
+            return 0;
+        }
+        return dailyAutonomousLimit - spent;
     }
 
     function _slice(bytes memory data, uint256 start, uint256 length) internal pure returns (bytes memory) {

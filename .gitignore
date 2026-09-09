@@ -9,6 +9,7 @@ Thumbs.db
 # Foundry
 contracts/out/
 contracts/cache/
+contracts/broadcast/
 
 # Node / NestJS
 node_modules/

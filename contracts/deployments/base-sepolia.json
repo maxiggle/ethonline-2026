@@ -1,0 +1,28 @@
+{
+  "network": "Base Sepolia",
+  "chainId": 84532,
+  "rpcUrl": "https://sepolia.base.org",
+  "blockExplorer": "https://base-sepolia.blockscout.com",
+  "contracts": {
+    "Chapter2Guard": {
+      "address": "0x9b6023D1B6D3b076C8d999Ba406AE486750ce7d3",
+      "deploymentTx": "0x86fe4afdb35ffafdc67fba833eeb4b68657e1539564f01c08d431106402347c5",
+      "verified": true,
+      "blockscoutUrl": "https://base-sepolia.blockscout.com/address/0x9b6023D1B6D3b076C8d999Ba406AE486750ce7d3"
+    },
+    "MockSafe": {
+      "address": "0x4f712dd78Cb1a504C69CB4f68B82Fddb6b3b1df6",
+      "deploymentTx": "0x67c5cfaf8e42dfb22bc41b6f4be9b7285a5a0e3925ef5288cd5988b791281766",
+      "verified": true,
+      "blockscoutUrl": "https://base-sepolia.blockscout.com/address/0x4f712dd78Cb1a504C69CB4f68B82Fddb6b3b1df6"
+    }
+  },
+  "parameters": {
+    "maxAutonomousAmount": "100000000",
+    "dailyAutonomousLimit": "500000000",
+    "approvedRecipients": [
+      "0x0000000000000000000000000000000000041c4e",
+      "0x00000000000000000000000000000000000000cf"
+    ]
+  }
+}

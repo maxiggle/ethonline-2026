@@ -121,4 +121,65 @@ contract Chapter2GuardTest is Test {
         );
         assertTrue(success);
     }
+
+    function test_DailyLimitEnforcement_AndRollover() public {
+        bytes memory transferData = abi.encodeWithSelector(
+            IERC20.transfer.selector,
+            alchemyRecipient,
+            100 * 1e6
+        );
+
+        for (uint256 i = 0; i < 5; i++) {
+            vm.prank(agent);
+            safe.execTransaction(
+                address(0x999),
+                0,
+                transferData,
+                0,
+                0,
+                0,
+                0,
+                address(0),
+                payable(address(0)),
+                ""
+            );
+        }
+
+        assertEq(guard.getRemainingDailyBudget(), 0);
+
+        vm.prank(agent);
+        vm.expectRevert(
+            abi.encodeWithSelector(Chapter2Guard.ExceedsDailyLimit.selector, 600 * 1e6, 500 * 1e6)
+        );
+        safe.execTransaction(
+            address(0x999),
+            0,
+            transferData,
+            0,
+            0,
+            0,
+            0,
+            address(0),
+            payable(address(0)),
+            ""
+        );
+
+        vm.warp(block.timestamp + 1 days);
+        assertEq(guard.getRemainingDailyBudget(), 500 * 1e6);
+
+        vm.prank(agent);
+        bool successAfterWarp = safe.execTransaction(
+            address(0x999),
+            0,
+            transferData,
+            0,
+            0,
+            0,
+            0,
+            address(0),
+            payable(address(0)),
+            ""
+        );
+        assertTrue(successAfterWarp);
+    }
 }

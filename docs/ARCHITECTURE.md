@@ -32,6 +32,7 @@ ethonline-2026/
 │   │   ├── guardian/                 # Asymmetric multi-tier AI risk engine & adversarial classifier
 │   │   ├── crypto/                   # EIP-712 payload generator & signature verifier
 │   │   ├── ledger/                   # Ledger Key Ring secret management adapter & clear-signing service
+│   │   ├── world/                    # World ID Credential 11 (Selfie Check) verification & human binding
 │   │   ├── app.module.ts             # Root module
 │   │   └── main.ts                   # Application entry point
 │   └── test/                         # End-to-end integration test suites

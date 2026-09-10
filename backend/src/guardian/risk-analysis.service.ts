@@ -8,14 +8,7 @@ import {
   SUBVERSION_INTENT_TOKENS,
   TARGET_CONSTRAINT_TOKENS,
 } from '../common/adversarial-patterns.constants';
-
-export interface SemanticAnalysisResult {
-  riskScore: number;
-  detectedIntents: string[];
-  normalizedContent: string;
-  leetspeakNormalized: boolean;
-  semanticClassifierConfidence: number;
-}
+import { SemanticAnalysisResult } from './interfaces/semantic-analysis-result.interface';
 
 @Injectable()
 export class RiskAnalysisService {

@@ -1,12 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PolicyEngineService } from '../policies/policy-engine.service';
-
-export interface BalanceReservation {
-  id: string;
-  actionId: string;
-  amount: bigint;
-  expiresAt: number;
-}
+import { BalanceReservation } from './interfaces/balance-reservation.interface';
 
 @Injectable()
 export class BalanceReservationService {

@@ -1,24 +1,22 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+import { Injectable, BadRequestException } from "@nestjs/common";
 import {
   TypedDataEncoder,
   AbiCoder,
   getAddress,
   verifyTypedData,
-  keccak256,
-  toUtf8Bytes,
-} from 'ethers';
+} from "ethers";
 import {
   Eip712Domain,
   TreasuryActionApprovalParams,
   Eip712TypedData,
   EscalatedExecutionPayload,
-} from './interfaces/eip712.interface';
+} from "./interfaces/eip712.interface";
 import {
   ACTION_APPROVAL_PRIMARY_TYPE,
   EIP712_ACTION_APPROVAL_TYPES,
   DEFAULT_BASE_SEPOLIA_DOMAIN,
   ESCALATED_ACTION_APPROVAL_ABI_TYPE,
-} from './eip712.constants';
+} from "./eip712.constants";
 
 @Injectable()
 export class Eip712Service {
@@ -45,7 +43,9 @@ export class Eip712Service {
   /**
    * Computes the 32-byte EIP-712 Domain Separator matching Chapter2Guard.DOMAIN_SEPARATOR().
    */
-  computeDomainSeparator(domain: Eip712Domain = DEFAULT_BASE_SEPOLIA_DOMAIN): string {
+  computeDomainSeparator(
+    domain: Eip712Domain = DEFAULT_BASE_SEPOLIA_DOMAIN,
+  ): string {
     const formattedDomain = this.formatDomain(domain);
     return TypedDataEncoder.hashDomain(formattedDomain);
   }
@@ -68,7 +68,11 @@ export class Eip712Service {
   ): string {
     const formattedDomain = this.formatDomain(domain);
     const message = this.formatMessage(params);
-    return TypedDataEncoder.hash(formattedDomain, EIP712_ACTION_APPROVAL_TYPES, message);
+    return TypedDataEncoder.hash(
+      formattedDomain,
+      EIP712_ACTION_APPROVAL_TYPES,
+      message,
+    );
   }
 
   /**
@@ -82,9 +86,16 @@ export class Eip712Service {
     try {
       const formattedDomain = this.formatDomain(domain);
       const message = this.formatMessage(params);
-      return verifyTypedData(formattedDomain, EIP712_ACTION_APPROVAL_TYPES, message, signature);
+      return verifyTypedData(
+        formattedDomain,
+        EIP712_ACTION_APPROVAL_TYPES,
+        message,
+        signature,
+      );
     } catch (error) {
-      throw new BadRequestException(`Failed to recover signer from signature: ${error.message}`);
+      throw new BadRequestException(
+        `Failed to recover signer from signature: ${error.message}`,
+      );
     }
   }
 
@@ -131,7 +142,7 @@ export class Eip712Service {
     ];
 
     return this.abiCoder.encode(
-      [ESCALATED_ACTION_APPROVAL_ABI_TYPE, 'bytes'],
+      [ESCALATED_ACTION_APPROVAL_ABI_TYPE, "bytes"],
       [tupleValues, signature],
     );
   }
@@ -142,7 +153,7 @@ export class Eip712Service {
   decodeEscalatedPayload(payloadHex: string): EscalatedExecutionPayload {
     try {
       const [decodedApproval, signature] = this.abiCoder.decode(
-        [ESCALATED_ACTION_APPROVAL_ABI_TYPE, 'bytes'],
+        [ESCALATED_ACTION_APPROVAL_ABI_TYPE, "bytes"],
         payloadHex,
       );
 
@@ -161,7 +172,9 @@ export class Eip712Service {
         signature,
       };
     } catch (error) {
-      throw new BadRequestException(`Failed to decode escalated execution payload: ${error.message}`);
+      throw new BadRequestException(
+        `Failed to decode escalated execution payload: ${error.message}`,
+      );
     }
   }
 
@@ -174,7 +187,9 @@ export class Eip712Service {
     };
   }
 
-  private formatMessage(params: TreasuryActionApprovalParams): Record<string, any> {
+  private formatMessage(
+    params: TreasuryActionApprovalParams,
+  ): Record<string, any> {
     return {
       actionId: params.actionId,
       agent: getAddress(params.agent),

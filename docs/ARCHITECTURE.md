@@ -30,7 +30,7 @@ ethonline-2026/
 │   │   ├── policies/                 # Deterministic policy engine & mandate validation
 │   │   ├── reservations/             # Atomic balance reservation service (anti-double-spending)
 │   │   ├── guardian/                 # Asymmetric multi-tier AI risk engine & adversarial classifier
-│   │   ├── crypto/                   # EIP-712 payload generator & signature verifier (In Progress)
+│   │   ├── crypto/                   # EIP-712 payload generator & signature verifier
 │   │   ├── app.module.ts             # Root module
 │   │   └── main.ts                   # Application entry point
 │   └── test/                         # End-to-end integration test suites

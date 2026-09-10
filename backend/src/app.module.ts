@@ -5,6 +5,8 @@ import { GuardianModule } from './guardian/guardian.module';
 import { CryptoModule } from './crypto/crypto.module';
 import { LedgerModule } from './ledger/ledger.module';
 import { WorldModule } from './world/world.module';
+import { GatewayModule } from './gateway/gateway.module';
+import { ActionsModule } from './actions/actions.module';
 
 @Module({
   imports: [
@@ -14,6 +16,8 @@ import { WorldModule } from './world/world.module';
     CryptoModule,
     LedgerModule,
     WorldModule,
+    GatewayModule,
+    ActionsModule,
   ],
   controllers: [],
   providers: [],

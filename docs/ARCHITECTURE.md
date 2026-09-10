@@ -33,6 +33,8 @@ ethonline-2026/
 │   │   ├── crypto/                   # EIP-712 payload generator & signature verifier
 │   │   ├── ledger/                   # Ledger Key Ring secret management adapter & clear-signing service
 │   │   ├── world/                    # World ID Credential 11 (Selfie Check) verification & human binding
+│   │   ├── gateway/                  # Real-time WebSocket gateway for mobile push notifications
+│   │   ├── actions/                  # Treasury action intake, lifecycle state machine, & REST controller
 │   │   ├── app.module.ts             # Root module
 │   │   └── main.ts                   # Application entry point
 │   └── test/                         # End-to-end integration test suites

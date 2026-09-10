@@ -2,13 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { GuardianDecisionType } from '../domain/guardian-decision.entity';
 import { TreasuryAction } from '../domain/treasury-action.entity';
 import { TreasuryMandate } from '../domain/treasury-mandate.entity';
-
-export interface PolicyEvaluationResult {
-  passed: boolean;
-  decision: GuardianDecisionType;
-  reasons: string[];
-  requiresHumanApproval: boolean;
-}
+import { PolicyEvaluationResult } from './interfaces/policy-evaluation-result.interface';
 
 @Injectable()
 export class PolicyEngineService {

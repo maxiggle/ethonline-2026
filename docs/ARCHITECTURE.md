@@ -35,6 +35,7 @@ ethonline-2026/
 │   │   ├── world/                    # World ID Credential 11 (Selfie Check) verification & human binding
 │   │   ├── gateway/                  # Real-time WebSocket gateway for mobile push notifications
 │   │   ├── actions/                  # Treasury action intake, lifecycle state machine, & REST controller
+│   │   ├── integration/              # End-to-end integration test scenarios (tri-verdict & lifecycle)
 │   │   ├── app.module.ts             # Root module
 │   │   └── main.ts                   # Application entry point
 │   └── test/                         # End-to-end integration test suites

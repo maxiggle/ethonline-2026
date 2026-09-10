@@ -30,10 +30,10 @@ export class RiskAnalysisService {
     const amount = BigInt(action.amount);
     const mandate = this.policyEngine.getMandate();
 
-    if (amount > mandate.maxAutonomousAmount) {
+    if (mandate.maxAutonomousAmount === 0n || amount > mandate.maxAutonomousAmount) {
       riskScore = Math.max(riskScore, 75);
     } else {
-      const fraction = Number(amount) / Number(mandate.maxAutonomousAmount);
+      const fraction = Number((amount * 10000n) / mandate.maxAutonomousAmount) / 10000;
       riskScore += Math.floor(fraction * 25);
     }
 
@@ -141,32 +141,64 @@ export class RiskAnalysisService {
 
   public normalizeText(input: string): { normalized: string; wasLeetspeak: boolean } {
     let wasLeetspeak = false;
-    const lower = input.toLowerCase();
+    const preSplit = input.replace(/[\._\-\/\\\|\+\*\^~`,;:]/g, ' ');
+    const words = preSplit.split(/\s+/).filter(Boolean);
 
-    let deobfuscated = '';
-    for (let i = 0; i < lower.length; i++) {
-      const char = lower[i];
-      if (LEET_SUBSTITUTION_MAP[char]) {
-        deobfuscated += LEET_SUBSTITUTION_MAP[char];
-        wasLeetspeak = true;
-      } else {
-        deobfuscated += char;
+    const normalizedWords = words.map((word) => {
+      // Pure numbers or percentages (e.g. "100%", "2026") are preserved without leetspeak transformation
+      if (/^[0-9]+%?$/.test(word)) {
+        return word.toLowerCase();
       }
+
+      const lower = word.toLowerCase();
+      let deob = '';
+      let wordHasLeet = false;
+      const hasLetters = /[a-z]/.test(lower);
+
+      for (const char of lower) {
+        if (LEET_SUBSTITUTION_MAP[char]) {
+          deob += LEET_SUBSTITUTION_MAP[char];
+          if (hasLetters || /[a-z]/.test(deob)) {
+            wordHasLeet = true;
+          }
+        } else {
+          deob += char;
+        }
+      }
+
+      if (wordHasLeet) {
+        wasLeetspeak = true;
+        return deob;
+      }
+      return lower;
+    });
+
+    return {
+      normalized: normalizedWords.join(' ').trim(),
+      wasLeetspeak,
+    };
+  }
+
+  private patternCache = new Map<readonly string[], RegExp[]>();
+
+  private getCompiledPatterns(cluster: readonly string[]): RegExp[] {
+    let patterns = this.patternCache.get(cluster);
+    if (!patterns) {
+      patterns = cluster.map((token) => {
+        const escaped = token
+          .toLowerCase()
+          .replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+          .replace(/ /g, '\\s+');
+        return new RegExp(`(?<!\\w)${escaped}(?!\\w)`, 'i');
+      });
+      this.patternCache.set(cluster, patterns);
     }
-
-    const strippedSeparators = deobfuscated
-      .replace(/[\._\-\/\\\|\+\*\^~`]/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim();
-
-    return { normalized: strippedSeparators, wasLeetspeak };
+    return patterns;
   }
 
   private containsTokenFromCluster(text: string, cluster: readonly string[]): boolean {
     const textLower = text.toLowerCase();
-    return cluster.some((token) => {
-      const regex = new RegExp(`\\b${token.replace(/ /g, '\\s+')}\\b`, 'i');
-      return regex.test(textLower) || textLower.includes(token);
-    });
+    const patterns = this.getCompiledPatterns(cluster);
+    return patterns.some((regex) => regex.test(textLower));
   }
 }

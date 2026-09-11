@@ -41,3 +41,13 @@ xcuserdata
 .env
 .env.*
 !.env.example
+
+# Swift / SPM
+.build/
+Packages/
+*.xcodeproj
+*.xcworkspace
+.swiftpm/
+
+# Gradle / JVM
+.gradle/

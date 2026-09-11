@@ -39,9 +39,9 @@ ethonline-2026/
 │   │   ├── app.module.ts             # Root module
 │   │   └── main.ts                   # Application entry point
 │   └── test/                         # End-to-end integration test suites
-├── native_security/                  # Phase 3: Native Security Packages (Pending)
-│   ├── ledger_keyring/               # Ledger wallet-cli ring headless secret management
-│   └── agentkit/                     # World ID & AgentKit human-backed identity verification
+├── native_security/                  # Phase 3: Native Security Packages (Strongly-Typed Swift & Kotlin)
+│   ├── ledger_keyring/               # Ledger APDU, BLE chunking, LKRP, Secure Enclave & StrongBox
+│   └── agentkit/                     # World ID Credential 11 (Selfie Check Beta) & Biometric Liveness
 ├── chapter2/                         # Phase 4: Flutter Mobile Command Center (Pending)
 └── docs/                             # Engineering specifications & feature documentation
     ├── ARCHITECTURE.md               # Master system architecture (this file)

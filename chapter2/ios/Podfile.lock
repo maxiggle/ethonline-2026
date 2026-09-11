@@ -1,0 +1,28 @@
+PODS:
+  - agent_security (0.0.1):
+    - Flutter
+  - Flutter (1.0.0)
+  - ledger_keyring (0.0.1):
+    - Flutter
+
+DEPENDENCIES:
+  - agent_security (from `.symlinks/plugins/agent_security/ios`)
+  - Flutter (from `Flutter`)
+  - ledger_keyring (from `.symlinks/plugins/ledger_keyring/ios`)
+
+EXTERNAL SOURCES:
+  agent_security:
+    :path: ".symlinks/plugins/agent_security/ios"
+  Flutter:
+    :path: Flutter
+  ledger_keyring:
+    :path: ".symlinks/plugins/ledger_keyring/ios"
+
+SPEC CHECKSUMS:
+  agent_security: a911b600c4ec1b040b44fe9461171ec6ffbf991f
+  Flutter: cabc95a1d2626b1b06e7179b784ebcf0c0cde467
+  ledger_keyring: 908fa732d663886c58c132bfd2c5769ddb7e1799
+
+PODFILE CHECKSUM: d71a8f9d234bf288cee64b372c30c196c8075224
+
+COCOAPODS: 1.17.0

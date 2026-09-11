@@ -18,6 +18,18 @@ class ApiClient {
             );
 
   final Dio _dio;
+  String? _authToken;
+
+  void setAuthToken(String? token) {
+    _authToken = token;
+    if (token != null && token.isNotEmpty) {
+      _dio.options.headers['Authorization'] = 'Bearer $token';
+    } else {
+      _dio.options.headers.remove('Authorization');
+    }
+  }
+
+  String? get authToken => _authToken;
 
   Future<dynamic> get(
     String path, {

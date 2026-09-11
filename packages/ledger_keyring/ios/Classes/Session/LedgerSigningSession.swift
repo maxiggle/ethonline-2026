@@ -50,7 +50,7 @@ public final class LedgerSigningSession: Sendable {
             ClearSignField(label: "Token Asset", value: payload.token, isCritical: false),
             ClearSignField(label: "Risk Score", value: "\(payload.riskScore) / 100 (\(riskTier.rawValue))", isCritical: true),
             ClearSignField(label: "Approval Nonce", value: "\(payload.nonce)", isCritical: false),
-            ClearSignField(label: "Deadline (UTC)", value: Date(timeIntervalSince1970: TimeInterval(payload.deadlineTimestamp)).ISO8601Format(), isCritical: true),
+            ClearSignField(label: "Deadline (UTC)", value: ISO8601DateFormatter().string(from: Date(timeIntervalSince1970: TimeInterval(payload.deadlineTimestamp))), isCritical: true),
             ClearSignField(label: "Mandate Hash", value: payload.mandateHash, isCritical: false),
         ]
 

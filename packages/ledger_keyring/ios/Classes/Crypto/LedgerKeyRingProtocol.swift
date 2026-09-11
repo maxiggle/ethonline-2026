@@ -27,6 +27,7 @@ public struct EncryptedKeyRingPayload: Equatable, Codable, Sendable {
     }
 }
 
+@available(iOS 14.0, macOS 11.0, *)
 public final class LedgerKeyRingProtocol: Sendable {
     public init() {}
 

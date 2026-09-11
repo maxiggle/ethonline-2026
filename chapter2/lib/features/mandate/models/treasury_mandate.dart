@@ -26,6 +26,36 @@ class TreasuryMandate extends Equatable {
     return approvedRecipients.any((r) => r.toLowerCase() == address.toLowerCase());
   }
 
+  factory TreasuryMandate.fromJson(Map<String, dynamic> json) {
+    return TreasuryMandate(
+      maxAutonomousAmountUsdc: (json['maxAutonomousAmountUsdc'] as num?)?.toDouble() ?? 100.0,
+      dailyAutonomousLimitUsdc: (json['dailyAutonomousLimitUsdc'] as num?)?.toDouble() ?? 500.0,
+      currentDailySpentUsdc: (json['currentDailySpentUsdc'] as num?)?.toDouble() ?? 0.0,
+      approvedRecipients: (json['approvedRecipients'] as List<dynamic>?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          const [],
+      approvedTokens: (json['approvedTokens'] as List<dynamic>?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          const [],
+      safeAddress: (json['safeAddress'] ?? '') as String,
+      guardAddress: (json['guardAddress'] ?? '') as String,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'maxAutonomousAmountUsdc': maxAutonomousAmountUsdc,
+      'dailyAutonomousLimitUsdc': dailyAutonomousLimitUsdc,
+      'currentDailySpentUsdc': currentDailySpentUsdc,
+      'approvedRecipients': approvedRecipients,
+      'approvedTokens': approvedTokens,
+      'safeAddress': safeAddress,
+      'guardAddress': guardAddress,
+    };
+  }
+
   @override
   List<Object?> get props => [
         maxAutonomousAmountUsdc,

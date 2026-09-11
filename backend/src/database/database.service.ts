@@ -11,6 +11,7 @@ import {
 
 interface InMemoryState {
   users: Map<string, any>;
+  agents: Map<string, any>;
   treasuryActions: Map<string, TreasuryActionRow>;
   treasuryMandates: Map<string, TreasuryMandateRow>;
   dailySpentLedger: Map<number, DailySpentLedgerRow>;
@@ -27,6 +28,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
   // High-performance synchronized in-memory tables for zero-latency hot paths
   private state: InMemoryState = {
     users: new Map(),
+    agents: new Map(),
     treasuryActions: new Map(),
     treasuryMandates: new Map(),
     dailySpentLedger: new Map(),
@@ -146,6 +148,20 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
         "createdAt" TIMESTAMPTZ NOT NULL,
         "updatedAt" TIMESTAMPTZ NOT NULL
       );
+
+      CREATE TABLE IF NOT EXISTS agent (
+        id VARCHAR(128) PRIMARY KEY,
+        "userId" VARCHAR(128) NOT NULL,
+        "agentAddress" VARCHAR(64) NOT NULL,
+        name VARCHAR(128) NOT NULL,
+        purpose TEXT,
+        "safeAddress" VARCHAR(64) NOT NULL,
+        "guardAddress" VARCHAR(64) NOT NULL,
+        "chainId" INTEGER NOT NULL DEFAULT 84532,
+        status VARCHAR(32) NOT NULL DEFAULT 'ACTIVE',
+        "createdAt" TIMESTAMPTZ NOT NULL,
+        "updatedAt" TIMESTAMPTZ NOT NULL
+      );
     `);
   }
 
@@ -161,6 +177,23 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
           name: row.name,
           avatarUrl: row.avatarUrl || row.avatar_url,
           walletAddress: row.walletAddress || row.wallet_address,
+          createdAt: new Date(row.createdAt || row.created_at).toISOString(),
+          updatedAt: new Date(row.updatedAt || row.updated_at).toISOString(),
+        });
+      }
+
+      const agentsRes = await this.pgPool.query('SELECT * FROM agent');
+      for (const row of agentsRes.rows) {
+        this.state.agents.set(row.id, {
+          id: row.id,
+          userId: row.userId || row.user_id,
+          agentAddress: row.agentAddress || row.agent_address,
+          name: row.name,
+          purpose: row.purpose,
+          safeAddress: row.safeAddress || row.safe_address,
+          guardAddress: row.guardAddress || row.guard_address,
+          chainId: Number(row.chainId || row.chain_id || 84532),
+          status: row.status || 'ACTIVE',
           createdAt: new Date(row.createdAt || row.created_at).toISOString(),
           updatedAt: new Date(row.updatedAt || row.updated_at).toISOString(),
         });
@@ -376,6 +409,25 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
       return Array.from(this.state.users.values()) as unknown as T[];
     }
 
+    if (s.includes('FROM AGENT') || s.includes('FROM "AGENT"') || s.includes('FROM AGENTS')) {
+      if (s.includes('WHERE "USERID" =') || s.includes('WHERE USERID =') || s.includes('WHERE USER_ID =')) {
+        const userId = params[0];
+        return Array.from(this.state.agents.values()).filter((a) => a.userId === userId) as unknown as T[];
+      }
+      if (s.includes('WHERE "AGENTADDRESS" =') || s.includes('WHERE AGENT_ADDRESS =')) {
+        const addr = String(params[0]).toLowerCase();
+        return Array.from(this.state.agents.values()).filter(
+          (a) => a.agentAddress.toLowerCase() === addr,
+        ) as unknown as T[];
+      }
+      if (s.includes('WHERE ID =')) {
+        const id = params[0];
+        const item = this.state.agents.get(id);
+        return item ? ([item] as unknown as T[]) : [];
+      }
+      return Array.from(this.state.agents.values()) as unknown as T[];
+    }
+
     return [];
   }
 
@@ -506,6 +558,28 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
         updatedAt: String(updatedAt),
       };
       this.state.users.set(id, user);
+      this.saveToFile();
+      this.asyncWriteToPostgres(sql, params);
+      return { changes: 1 };
+    }
+
+    // 6. Agent Management
+    if (s.includes('INTO AGENT') || s.includes('INTO "AGENT"') || s.includes('INTO AGENTS')) {
+      const [id, userId, agentAddress, name, purpose, safeAddress, guardAddress, chainId, status, createdAt, updatedAt] = params;
+      const agent = {
+        id,
+        userId,
+        agentAddress,
+        name,
+        purpose: purpose || null,
+        safeAddress,
+        guardAddress,
+        chainId: Number(chainId || 84532),
+        status: status || 'ACTIVE',
+        createdAt: String(createdAt),
+        updatedAt: String(updatedAt),
+      };
+      this.state.agents.set(id, agent);
       this.saveToFile();
       this.asyncWriteToPostgres(sql, params);
       return { changes: 1 };

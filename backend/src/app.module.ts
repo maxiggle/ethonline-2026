@@ -11,11 +11,13 @@ import { ActionsModule } from './actions/actions.module';
 import { BlockchainModule } from './blockchain/blockchain.module';
 import { VendorModule } from './vendor/vendor.module';
 import { AuthModule } from './auth/auth.module';
+import { AgentsModule } from './agents/agents.module';
 
 @Module({
   imports: [
     DatabaseModule,
     AuthModule,
+    AgentsModule,
     BlockchainModule,
     VendorModule,
     PoliciesModule,

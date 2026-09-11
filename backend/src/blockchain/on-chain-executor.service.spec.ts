@@ -138,7 +138,7 @@ describe('OnChainExecutorService (Tested with Actual On-Chain Data)', () => {
         '0x9999999999999999999999999999999999999999',
       );
       expect(isUnapproved).toBe(false);
-    });
+    }, 15000);
 
     it('should query live Safe contract state directly from Base Sepolia', async () => {
       const safeConfig = await service.getOnChainSafeConfig();
@@ -146,7 +146,7 @@ describe('OnChainExecutorService (Tested with Actual On-Chain Data)', () => {
       expect(safeConfig.guardAddress.toLowerCase()).toBe(realGuardAddress.toLowerCase());
       expect(safeConfig.owner.toLowerCase()).toBe(service.relayerWallet.address.toLowerCase());
       expect(safeConfig.nonce).toBeGreaterThanOrEqual(0n);
-    });
+    }, 15000);
   });
 
   describe('Actual On-Chain Transaction Receipt Verification (verifyTransaction)', () => {

@@ -10,10 +10,12 @@ import { GatewayModule } from './gateway/gateway.module';
 import { ActionsModule } from './actions/actions.module';
 import { BlockchainModule } from './blockchain/blockchain.module';
 import { VendorModule } from './vendor/vendor.module';
+import { AuthModule } from './auth/auth.module';
 
 @Module({
   imports: [
     DatabaseModule,
+    AuthModule,
     BlockchainModule,
     VendorModule,
     PoliciesModule,

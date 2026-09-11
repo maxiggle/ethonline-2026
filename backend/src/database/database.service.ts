@@ -10,6 +10,7 @@ import {
 } from './database.interface';
 
 interface InMemoryState {
+  users: Map<string, any>;
   treasuryActions: Map<string, TreasuryActionRow>;
   treasuryMandates: Map<string, TreasuryMandateRow>;
   dailySpentLedger: Map<number, DailySpentLedgerRow>;
@@ -25,6 +26,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
 
   // High-performance synchronized in-memory tables for zero-latency hot paths
   private state: InMemoryState = {
+    users: new Map(),
     treasuryActions: new Map(),
     treasuryMandates: new Map(),
     dailySpentLedger: new Map(),
@@ -134,6 +136,16 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
         bound_at TIMESTAMPTZ NOT NULL,
         expires_at TIMESTAMPTZ NOT NULL
       );
+
+      CREATE TABLE IF NOT EXISTS "user" (
+        id VARCHAR(128) PRIMARY KEY,
+        email VARCHAR(128) UNIQUE,
+        name VARCHAR(128),
+        "avatarUrl" TEXT,
+        "walletAddress" VARCHAR(64),
+        "createdAt" TIMESTAMPTZ NOT NULL,
+        "updatedAt" TIMESTAMPTZ NOT NULL
+      );
     `);
   }
 
@@ -141,6 +153,19 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     if (!this.pgPool) return;
 
     try {
+      const usersRes = await this.pgPool.query('SELECT * FROM "user"');
+      for (const row of usersRes.rows) {
+        this.state.users.set(row.id, {
+          id: row.id,
+          email: row.email,
+          name: row.name,
+          avatarUrl: row.avatarUrl || row.avatar_url,
+          walletAddress: row.walletAddress || row.wallet_address,
+          createdAt: new Date(row.createdAt || row.created_at).toISOString(),
+          updatedAt: new Date(row.updatedAt || row.updated_at).toISOString(),
+        });
+      }
+
       const actionsRes = await this.pgPool.query<TreasuryActionRow>(
         'SELECT * FROM treasury_actions ORDER BY nonce ASC',
       );
@@ -342,6 +367,15 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
       return Array.from(this.state.humanBindings.values()) as unknown as T[];
     }
 
+    if (s.includes('FROM "USER"') || s.includes('FROM USER ') || s.includes('FROM USERS')) {
+      if (s.includes('WHERE ID =')) {
+        const id = params[0];
+        const item = this.state.users.get(id);
+        return item ? ([item] as unknown as T[]) : [];
+      }
+      return Array.from(this.state.users.values()) as unknown as T[];
+    }
+
     return [];
   }
 
@@ -456,6 +490,22 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     if (s.startsWith('DELETE FROM HUMAN_BINDINGS')) {
       const signer = String(params[0]).toLowerCase();
       this.state.humanBindings.delete(signer);
+      return { changes: 1 };
+    }
+
+    // 5. User Identity
+    if (s.includes('INTO "USER"') || s.includes('INTO USER ') || s.includes('INTO USERS')) {
+      const [id, email, name, avatarUrl, walletAddress, createdAt, updatedAt] = params;
+      const user = {
+        id,
+        email: email || null,
+        name: name || null,
+        avatarUrl: avatarUrl || null,
+        walletAddress: walletAddress || null,
+        createdAt: String(createdAt),
+        updatedAt: String(updatedAt),
+      };
+      this.state.users.set(id, user);
       this.saveToFile();
       this.asyncWriteToPostgres(sql, params);
       return { changes: 1 };

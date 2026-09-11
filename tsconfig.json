@@ -1,0 +1,13 @@
+{
+  "compilerOptions": {
+    "module": "commonjs",
+    "target": "ES2021",
+    "rootDir": ".",
+    "ignoreDeprecations": "5.0",
+    "skipLibCheck": true,
+    "noImplicitAny": false
+  },
+  "ts-node": {
+    "transpileOnly": true
+  }
+}

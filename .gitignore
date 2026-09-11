@@ -42,6 +42,14 @@ xcuserdata
 .env.*
 !.env.example
 
+# Databases
+*.sqlite
+*.sqlite-journal
+*.sqlite-wal
+*.sqlite-shm
+data/
+backend/data/
+
 # Swift / SPM
 .build/
 Packages/

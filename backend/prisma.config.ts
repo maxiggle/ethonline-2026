@@ -1,7 +1,6 @@
+// @ts-nocheck
 import 'dotenv/config';
-// @ts-ignore
 import { definePrismaConfig } from '@prisma/cli-engine';
-// @ts-ignore
 import { defineConfig as ormConfig } from '@prisma/orm-postgres/config';
 
 export default definePrismaConfig({

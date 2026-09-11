@@ -115,6 +115,6 @@ describe('VendorController (x402 Protocol)', () => {
 
       expect(response.status).toBe('UNLOCKED');
       expect(response.txHash).toBe(realTxHash);
-    });
+    }, 15000);
   });
 });

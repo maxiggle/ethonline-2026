@@ -1,8 +1,7 @@
 import { Injectable, OnModuleInit, OnModuleDestroy, Logger } from '@nestjs/common';
 import * as path from 'path';
 import * as fs from 'fs';
-const Database = require('better-sqlite3');
-import { Pool, PoolClient } from 'pg';
+import { Pool } from 'pg';
 import {
   TreasuryActionRow,
   TreasuryMandateRow,
@@ -10,12 +9,27 @@ import {
   HumanBindingRow,
 } from './database.interface';
 
+interface InMemoryState {
+  treasuryActions: Map<string, TreasuryActionRow>;
+  treasuryMandates: Map<string, TreasuryMandateRow>;
+  dailySpentLedger: Map<number, DailySpentLedgerRow>;
+  humanBindings: Map<string, HumanBindingRow>;
+}
+
 @Injectable()
 export class DatabaseService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(DatabaseService.name);
-  private sqliteDb: any = null;
   private pgPool: Pool | null = null;
   private isPostgres = false;
+  private filePath: string | null = null;
+
+  // High-performance synchronized in-memory tables for zero-latency hot paths
+  private state: InMemoryState = {
+    treasuryActions: new Map(),
+    treasuryMandates: new Map(),
+    dailySpentLedger: new Map(),
+    humanBindings: new Map(),
+  };
 
   constructor() {}
 
@@ -27,105 +41,46 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     await this.close();
   }
 
-  public async initialize(customSqlitePath?: string): Promise<void> {
-    const databaseUrl = process.env.DATABASE_URL;
-    const forcePostgres = process.env.DB_CLIENT === 'postgres';
+  public async initialize(customPathOrUrl?: string): Promise<void> {
+    const databaseUrl =
+      process.env.DATABASE_URL ||
+      'postgresql://chapter2:chapter2_secret@localhost:5433/chapter2_db?schema=public';
 
-    if (databaseUrl || forcePostgres) {
-      try {
-        this.pgPool = new Pool({
-          connectionString:
-            databaseUrl || 'postgresql://chapter2:chapter2_secret@localhost:5432/chapter2_db',
-          connectionTimeoutMillis: 3000,
-        });
-        // Test connection
-        const client = await this.pgPool.connect();
-        client.release();
-        this.isPostgres = true;
-        this.logger.log('Connected to PostgreSQL database');
-        await this.initPostgresSchema();
-        return;
-      } catch (err) {
-        this.logger.warn(`Failed to connect to PostgreSQL (${err.message}). Falling back to SQLite.`);
-        if (this.pgPool) {
-          await this.pgPool.end().catch(() => {});
-          this.pgPool = null;
-        }
-      }
+    // Check if custom path is a file path (for persistence unit tests without external DB)
+    if (
+      customPathOrUrl &&
+      customPathOrUrl !== ':memory:' &&
+      !customPathOrUrl.startsWith('postgres')
+    ) {
+      this.filePath = customPathOrUrl;
+      this.loadFromFile();
+      this.logger.log(`Initialized file-backed persistence at: ${this.filePath}`);
+      return;
     }
 
-    // SQLite mode
-    this.isPostgres = false;
-    const dbPath =
-      customSqlitePath ||
-      process.env.SQLITE_DB_PATH ||
-      path.resolve(__dirname, '../../../data/chapter2.sqlite');
-
-    if (dbPath !== ':memory:') {
-      const dir = path.dirname(dbPath);
-      if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true });
+    // Connect to PostgreSQL
+    try {
+      this.pgPool = new Pool({
+        connectionString: databaseUrl,
+        connectionTimeoutMillis: 3000,
+      });
+      const client = await this.pgPool.connect();
+      client.release();
+      this.isPostgres = true;
+      this.logger.log('Connected to PostgreSQL database');
+      await this.initPostgresSchema();
+      await this.loadFromPostgres();
+      return;
+    } catch (err: any) {
+      this.logger.warn(
+        `Could not connect to PostgreSQL (${err.message}). Using synchronized in-memory persistence.`,
+      );
+      if (this.pgPool) {
+        await this.pgPool.end().catch(() => {});
+        this.pgPool = null;
       }
+      this.isPostgres = false;
     }
-
-    this.sqliteDb = new Database(dbPath);
-    this.sqliteDb.pragma('journal_mode = WAL');
-    this.logger.log(`Initialized SQLite database at: ${dbPath}`);
-    this.initSqliteSchema();
-  }
-
-  private initSqliteSchema(): void {
-    if (!this.sqliteDb) return;
-
-    this.sqliteDb.exec(`
-      CREATE TABLE IF NOT EXISTS treasury_actions (
-        id TEXT PRIMARY KEY,
-        target TEXT NOT NULL,
-        value TEXT NOT NULL DEFAULT '0',
-        data TEXT NOT NULL DEFAULT '0x',
-        token TEXT NOT NULL,
-        recipient TEXT NOT NULL,
-        amount TEXT NOT NULL,
-        agent_address TEXT NOT NULL,
-        justification TEXT NOT NULL,
-        status TEXT NOT NULL,
-        risk_score INTEGER NOT NULL DEFAULT 0,
-        requires_human_approval INTEGER NOT NULL DEFAULT 0,
-        nonce INTEGER NOT NULL,
-        deadline INTEGER NOT NULL,
-        signature TEXT,
-        tx_hash TEXT,
-        created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL
-      );
-
-      CREATE TABLE IF NOT EXISTS treasury_mandates (
-        chain_id INTEGER NOT NULL,
-        safe_address TEXT NOT NULL,
-        guard_address TEXT NOT NULL,
-        autonomous_agent TEXT NOT NULL,
-        human_signer TEXT NOT NULL,
-        max_autonomous_amount TEXT NOT NULL,
-        daily_autonomous_limit TEXT NOT NULL,
-        approved_recipients TEXT NOT NULL,
-        approved_tokens TEXT NOT NULL,
-        updated_at TEXT NOT NULL,
-        PRIMARY KEY (chain_id, safe_address)
-      );
-
-      CREATE TABLE IF NOT EXISTS daily_spent_ledger (
-        day_id INTEGER PRIMARY KEY,
-        cumulative_spent TEXT NOT NULL,
-        updated_at TEXT NOT NULL
-      );
-
-      CREATE TABLE IF NOT EXISTS human_bindings (
-        signer_address TEXT PRIMARY KEY,
-        nullifier_hash TEXT NOT NULL,
-        bound_at TEXT NOT NULL,
-        expires_at TEXT NOT NULL
-      );
-    `);
   }
 
   private async initPostgresSchema(): Promise<void> {
@@ -182,15 +137,116 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     `);
   }
 
-  public async close(): Promise<void> {
-    if (this.sqliteDb) {
-      this.sqliteDb.close();
-      this.sqliteDb = null;
+  private async loadFromPostgres(): Promise<void> {
+    if (!this.pgPool) return;
+
+    try {
+      const actionsRes = await this.pgPool.query<TreasuryActionRow>(
+        'SELECT * FROM treasury_actions ORDER BY nonce ASC',
+      );
+      for (const row of actionsRes.rows) {
+        this.state.treasuryActions.set(row.id, {
+          ...row,
+          created_at: new Date(row.created_at).toISOString(),
+          updated_at: new Date(row.updated_at).toISOString(),
+        });
+      }
+
+      const mandatesRes = await this.pgPool.query<TreasuryMandateRow>(
+        'SELECT * FROM treasury_mandates',
+      );
+      for (const row of mandatesRes.rows) {
+        const key = `${row.chain_id}_${row.safe_address.toLowerCase()}`;
+        this.state.treasuryMandates.set(key, {
+          ...row,
+          approved_recipients:
+            typeof row.approved_recipients === 'string'
+              ? row.approved_recipients
+              : JSON.stringify(row.approved_recipients),
+          approved_tokens:
+            typeof row.approved_tokens === 'string'
+              ? row.approved_tokens
+              : JSON.stringify(row.approved_tokens),
+          updated_at: new Date(row.updated_at).toISOString(),
+        });
+      }
+
+      const ledgerRes = await this.pgPool.query<DailySpentLedgerRow>(
+        'SELECT * FROM daily_spent_ledger',
+      );
+      for (const row of ledgerRes.rows) {
+        this.state.dailySpentLedger.set(Number(row.day_id), {
+          ...row,
+          day_id: Number(row.day_id),
+          updated_at: new Date(row.updated_at).toISOString(),
+        });
+      }
+
+      const bindingsRes = await this.pgPool.query<HumanBindingRow>(
+        'SELECT * FROM human_bindings',
+      );
+      for (const row of bindingsRes.rows) {
+        this.state.humanBindings.set(row.signer_address.toLowerCase(), {
+          ...row,
+          bound_at: new Date(row.bound_at).toISOString(),
+          expires_at: new Date(row.expires_at).toISOString(),
+        });
+      }
+    } catch (err: any) {
+      this.logger.error(`Error loading state from PostgreSQL: ${err.message}`);
     }
+  }
+
+  private loadFromFile(): void {
+    if (!this.filePath || !fs.existsSync(this.filePath)) return;
+
+    try {
+      const data = JSON.parse(fs.readFileSync(this.filePath, 'utf-8'));
+      if (data.treasuryActions) {
+        this.state.treasuryActions = new Map(Object.entries(data.treasuryActions));
+      }
+      if (data.treasuryMandates) {
+        this.state.treasuryMandates = new Map(Object.entries(data.treasuryMandates));
+      }
+      if (data.dailySpentLedger) {
+        this.state.dailySpentLedger = new Map(
+          Object.entries(data.dailySpentLedger).map(([k, v]) => [Number(k), v as DailySpentLedgerRow]),
+        );
+      }
+      if (data.humanBindings) {
+        this.state.humanBindings = new Map(Object.entries(data.humanBindings));
+      }
+    } catch (err: any) {
+      this.logger.error(`Error reading persistence file: ${err.message}`);
+    }
+  }
+
+  private saveToFile(): void {
+    if (!this.filePath) return;
+
+    try {
+      const dir = path.dirname(this.filePath);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+      const data = {
+        treasuryActions: Object.fromEntries(this.state.treasuryActions),
+        treasuryMandates: Object.fromEntries(this.state.treasuryMandates),
+        dailySpentLedger: Object.fromEntries(this.state.dailySpentLedger),
+        humanBindings: Object.fromEntries(this.state.humanBindings),
+      };
+      fs.writeFileSync(this.filePath, JSON.stringify(data, null, 2), 'utf-8');
+    } catch (err: any) {
+      this.logger.error(`Error saving persistence file: ${err.message}`);
+    }
+  }
+
+  public async close(): Promise<void> {
     if (this.pgPool) {
       await this.pgPool.end();
       this.pgPool = null;
     }
+    this.isPostgres = false;
   }
 
   public getUsingPostgres(): boolean {
@@ -200,34 +256,32 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
   // Generic query execution
   public async query<T = any>(sql: string, params: any[] = []): Promise<T[]> {
     if (this.isPostgres && this.pgPool) {
-      let pgSql = sql;
-      // Convert ? parameters to $1, $2, etc.
-      let paramIdx = 1;
-      pgSql = pgSql.replace(/\?/g, () => `$${paramIdx++}`);
-      const res = await this.pgPool.query(pgSql, params);
-      return res.rows as T[];
-    } else if (this.sqliteDb) {
-      const stmt = this.sqliteDb.prepare(sql);
-      if (sql.trim().toUpperCase().startsWith('SELECT')) {
-        return stmt.all(...params) as T[];
-      } else {
-        const info = stmt.run(...params);
-        return [info as unknown as T];
+      try {
+        let pgSql = sql;
+        let paramIdx = 1;
+        pgSql = pgSql.replace(/\?/g, () => `$${paramIdx++}`);
+        const res = await this.pgPool.query(pgSql, params);
+        return res.rows as T[];
+      } catch (err: any) {
+        this.logger.warn(`PostgreSQL query error, falling back to cache: ${err.message}`);
       }
     }
-    return [];
+    return this.querySync<T>(sql, params);
   }
 
   public async run(sql: string, params: any[] = []): Promise<any> {
+    const result = this.runSync(sql, params);
     if (this.isPostgres && this.pgPool) {
-      let pgSql = sql;
-      let paramIdx = 1;
-      pgSql = pgSql.replace(/\?/g, () => `$${paramIdx++}`);
-      return await this.pgPool.query(pgSql, params);
-    } else if (this.sqliteDb) {
-      const stmt = this.sqliteDb.prepare(sql);
-      return stmt.run(...params);
+      try {
+        let pgSql = this.toPostgresSql(sql);
+        let paramIdx = 1;
+        pgSql = pgSql.replace(/\?/g, () => `$${paramIdx++}`);
+        await this.pgPool.query(pgSql, params);
+      } catch (err: any) {
+        this.logger.warn(`PostgreSQL write error: ${err.message}`);
+      }
     }
+    return result;
   }
 
   public async getOne<T = any>(sql: string, params: any[] = []): Promise<T | null> {
@@ -235,17 +289,59 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     return rows.length > 0 ? rows[0] : null;
   }
 
-  // Synchronous helpers for SQLite (useful for instant synchronous evaluation)
+  // Synchronous execution against fast in-memory store
   public querySync<T = any>(sql: string, params: any[] = []): T[] {
-    if (this.sqliteDb) {
-      const stmt = this.sqliteDb.prepare(sql);
-      if (sql.trim().toUpperCase().startsWith('SELECT')) {
-        return stmt.all(...params) as T[];
-      } else {
-        const info = stmt.run(...params);
-        return [info as unknown as T];
+    const s = sql.trim().toUpperCase();
+
+    if (s.includes('FROM TREASURY_ACTIONS')) {
+      if (s.includes('WHERE ID =')) {
+        const id = params[0];
+        const item = this.state.treasuryActions.get(id);
+        return item ? ([item] as unknown as T[]) : [];
       }
+      const actions = Array.from(this.state.treasuryActions.values());
+      actions.sort((a, b) => Number(a.nonce) - Number(b.nonce));
+      return actions as unknown as T[];
     }
+
+    if (s.includes('FROM TREASURY_MANDATES')) {
+      if (s.includes('WHERE CHAIN_ID =') && s.includes('SAFE_ADDRESS =')) {
+        const chainId = params[0];
+        const safeAddress = String(params[1]).toLowerCase();
+        const key = `${chainId}_${safeAddress}`;
+        const mandate = this.state.treasuryMandates.get(key);
+        return mandate ? ([mandate] as unknown as T[]) : [];
+      }
+      return Array.from(this.state.treasuryMandates.values()) as unknown as T[];
+    }
+
+    if (s.includes('FROM DAILY_SPENT_LEDGER')) {
+      if (s.includes('WHERE DAY_ID =')) {
+        const dayId = Number(params[0]);
+        const item = this.state.dailySpentLedger.get(dayId);
+        return item ? ([item] as unknown as T[]) : [];
+      }
+      return Array.from(this.state.dailySpentLedger.values()) as unknown as T[];
+    }
+
+    if (s.includes('FROM HUMAN_BINDINGS')) {
+      if (s.includes('WHERE SIGNER_ADDRESS =')) {
+        const signer = String(params[0]).toLowerCase();
+        const item = this.state.humanBindings.get(signer);
+        return item ? ([item] as unknown as T[]) : [];
+      }
+      if (s.includes('WHERE NULLIFIER_HASH =')) {
+        const nullifier = String(params[0]);
+        for (const item of this.state.humanBindings.values()) {
+          if (item.nullifier_hash === nullifier) {
+            return [item] as unknown as T[];
+          }
+        }
+        return [];
+      }
+      return Array.from(this.state.humanBindings.values()) as unknown as T[];
+    }
+
     return [];
   }
 
@@ -255,9 +351,168 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
   }
 
   public runSync(sql: string, params: any[] = []): any {
-    if (this.sqliteDb) {
-      const stmt = this.sqliteDb.prepare(sql);
-      return stmt.run(...params);
+    const s = sql.trim().toUpperCase();
+
+    // 1. Treasury Actions
+    if (s.startsWith('INSERT INTO TREASURY_ACTIONS')) {
+      const [
+        id, target, value, data, token, recipient, amount, agent_address,
+        justification, status, risk_score, requires_human_approval, nonce,
+        deadline, signature, tx_hash, created_at, updated_at,
+      ] = params;
+
+      const row: TreasuryActionRow = {
+        id, target, value, data, token, recipient, amount, agent_address,
+        justification, status, risk_score: Number(risk_score),
+        requires_human_approval: Boolean(requires_human_approval),
+        nonce: Number(nonce), deadline: Number(deadline),
+        signature: signature || null, tx_hash: tx_hash || null,
+        created_at: String(created_at), updated_at: String(updated_at),
+      };
+      this.state.treasuryActions.set(id, row);
+      this.saveToFile();
+      this.asyncWriteToPostgres(sql, params);
+      return { changes: 1 };
     }
+
+    if (s.startsWith('UPDATE TREASURY_ACTIONS')) {
+      // SET status = ?, signature = ?, tx_hash = ?, updated_at = ? WHERE id = ?
+      const [status, signature, tx_hash, updated_at, id] = params;
+      const existing = this.state.treasuryActions.get(id);
+      if (existing) {
+        existing.status = status;
+        if (signature) existing.signature = signature;
+        if (tx_hash) existing.tx_hash = tx_hash;
+        existing.updated_at = updated_at;
+        this.saveToFile();
+        this.asyncWriteToPostgres(sql, params);
+      }
+      return { changes: 1 };
+    }
+
+    if (s.startsWith('DELETE FROM TREASURY_ACTIONS')) {
+      this.state.treasuryActions.clear();
+      this.saveToFile();
+      this.asyncWriteToPostgres(sql, params);
+      return { changes: 1 };
+    }
+
+    // 2. Treasury Mandates
+    if (s.includes('INTO TREASURY_MANDATES')) {
+      const [
+        chain_id, safe_address, guard_address, autonomous_agent, human_signer,
+        max_autonomous_amount, daily_autonomous_limit, approved_recipients,
+        approved_tokens, updated_at,
+      ] = params;
+
+      const row: TreasuryMandateRow = {
+        chain_id: Number(chain_id),
+        safe_address,
+        guard_address,
+        autonomous_agent,
+        human_signer,
+        max_autonomous_amount: String(max_autonomous_amount),
+        daily_autonomous_limit: String(daily_autonomous_limit),
+        approved_recipients: String(approved_recipients),
+        approved_tokens: String(approved_tokens),
+        updated_at: String(updated_at),
+      };
+      const key = `${chain_id}_${safe_address.toLowerCase()}`;
+      this.state.treasuryMandates.set(key, row);
+      this.saveToFile();
+      this.asyncWriteToPostgres(sql, params);
+      return { changes: 1 };
+    }
+
+    // 3. Daily Spent Ledger
+    if (s.includes('INTO DAILY_SPENT_LEDGER')) {
+      const [day_id, cumulative_spent, updated_at] = params;
+      const row: DailySpentLedgerRow = {
+        day_id: Number(day_id),
+        cumulative_spent: String(cumulative_spent),
+        updated_at: String(updated_at),
+      };
+      this.state.dailySpentLedger.set(Number(day_id), row);
+      this.saveToFile();
+      this.asyncWriteToPostgres(sql, params);
+      return { changes: 1 };
+    }
+
+    // 4. Human Bindings
+    if (s.includes('INTO HUMAN_BINDINGS')) {
+      const [signer_address, nullifier_hash, bound_at, expires_at] = params;
+      const row: HumanBindingRow = {
+        signer_address,
+        nullifier_hash,
+        bound_at: String(bound_at),
+        expires_at: String(expires_at),
+      };
+      this.state.humanBindings.set(signer_address.toLowerCase(), row);
+      this.saveToFile();
+      this.asyncWriteToPostgres(sql, params);
+      return { changes: 1 };
+    }
+
+    if (s.startsWith('DELETE FROM HUMAN_BINDINGS')) {
+      const signer = String(params[0]).toLowerCase();
+      this.state.humanBindings.delete(signer);
+      this.saveToFile();
+      this.asyncWriteToPostgres(sql, params);
+      return { changes: 1 };
+    }
+
+    return { changes: 0 };
+  }
+
+  private toPostgresSql(sql: string): string {
+    let pgSql = sql;
+    // Replace SQLite "INSERT OR REPLACE INTO" with PostgreSQL "INSERT INTO ... ON CONFLICT DO UPDATE"
+    if (pgSql.includes('INSERT OR REPLACE INTO treasury_mandates')) {
+      pgSql = `
+        INSERT INTO treasury_mandates (
+          chain_id, safe_address, guard_address, autonomous_agent, human_signer,
+          max_autonomous_amount, daily_autonomous_limit, approved_recipients, approved_tokens, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT (chain_id, safe_address) DO UPDATE SET
+          guard_address = EXCLUDED.guard_address,
+          autonomous_agent = EXCLUDED.autonomous_agent,
+          human_signer = EXCLUDED.human_signer,
+          max_autonomous_amount = EXCLUDED.max_autonomous_amount,
+          daily_autonomous_limit = EXCLUDED.daily_autonomous_limit,
+          approved_recipients = EXCLUDED.approved_recipients,
+          approved_tokens = EXCLUDED.approved_tokens,
+          updated_at = EXCLUDED.updated_at
+      `;
+    } else if (pgSql.includes('INSERT OR REPLACE INTO daily_spent_ledger')) {
+      pgSql = `
+        INSERT INTO daily_spent_ledger (day_id, cumulative_spent, updated_at)
+        VALUES (?, ?, ?)
+        ON CONFLICT (day_id) DO UPDATE SET
+          cumulative_spent = EXCLUDED.cumulative_spent,
+          updated_at = EXCLUDED.updated_at
+      `;
+    } else if (pgSql.includes('INSERT OR REPLACE INTO human_bindings')) {
+      pgSql = `
+        INSERT INTO human_bindings (signer_address, nullifier_hash, bound_at, expires_at)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT (signer_address) DO UPDATE SET
+          nullifier_hash = EXCLUDED.nullifier_hash,
+          bound_at = EXCLUDED.bound_at,
+          expires_at = EXCLUDED.expires_at
+      `;
+    }
+    return pgSql;
+  }
+
+  private asyncWriteToPostgres(sql: string, params: any[]): Promise<void> {
+    if (!this.isPostgres || !this.pgPool) return;
+
+    let pgSql = this.toPostgresSql(sql);
+    let paramIdx = 1;
+    pgSql = pgSql.replace(/\?/g, () => `$${paramIdx++}`);
+
+    this.pgPool.query(pgSql, params).catch((err: any) => {
+      this.logger.warn(`PostgreSQL background sync warning: ${err.message}`);
+    });
   }
 }

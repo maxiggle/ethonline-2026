@@ -1,0 +1,90 @@
+// use prisma-next
+
+// Authenticated User Identity (Google via Privy)
+model User {
+  id            String    @id // Privy DID: did:privy:...
+  email         String?   @unique
+  name          String?
+  avatarUrl     String?
+  walletAddress String?   // Privy Non-Custodial Embedded EVM Wallet address
+  createdAt     TimestamptzString @default(now())
+  updatedAt     temporal.updatedAtString()
+
+  agents        Agent[]
+  mandates      TreasuryMandate[]
+}
+
+// Autonomous Agent owned and supervised by a User
+model Agent {
+  id            String    @id
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  agentAddress  String    // EVM address of autonomous AI agent
+  name          String
+  purpose       String?
+  safeAddress   String    // Associated Safe Multisig
+  guardAddress  String    // Associated Chapter2Guard contract
+  chainId       Int       @default(84532)
+  status        String    @default("ACTIVE") // ACTIVE, PAUSED, REVOKED
+  createdAt     TimestamptzString @default(now())
+  updatedAt     temporal.updatedAtString()
+
+  actions       TreasuryAction[]
+}
+
+// Autonomous Treasury Actions proposed by agents or guardians
+model TreasuryAction {
+  id                     String    @id
+  target                 String
+  value                  String    @default("0")
+  data                   String    @default("0x")
+  token                  String
+  recipient              String
+  amount                 String
+  agentAddress           String
+  agentId                String?
+  agent                  Agent?    @relation(fields: [agentId], references: [id], onDelete: SetNull)
+  justification          String
+  status                 String    // PENDING, APPROVED, EXECUTED, REJECTED, BLOCKED, ESCALATED
+  riskScore              Int       @default(0)
+  requiresHumanApproval  Boolean   @default(false)
+  nonce                  Int
+  deadline               BigInt
+  signature              String?
+  txHash                 String?
+  createdAt              TimestamptzString @default(now())
+  updatedAt              temporal.updatedAtString()
+}
+
+// Treasury Mandate defining autonomous limits and policies
+model TreasuryMandate {
+  id                   String    @id
+  chainId              Int
+  safeAddress          String
+  guardAddress         String
+  autonomousAgent      String
+  humanSigner          String
+  maxAutonomousAmount  String    // Stored as string to preserve uint256 precision
+  dailyAutonomousLimit String    // Stored as string to preserve uint256 precision
+  approvedRecipients   Json      // JSON array of whitelisted addresses
+  approvedTokens       Json      // JSON array of whitelisted token addresses
+  userId               String?
+  user                 User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  createdAt            TimestamptzString @default(now())
+  updatedAt            temporal.updatedAtString()
+}
+
+// Daily Spent Ledger tracking rolling spending against daily limits
+model DailySpentLedger {
+  dayId            Int       @id // Unix timestamp / 86400
+  cumulativeSpent  String    // Stored as string to preserve uint256 precision
+  updatedAt        temporal.updatedAtString()
+}
+
+// World ID / Biometric Human Binding for hardware or biometric signers
+model HumanBinding {
+  signerAddress    String    @id
+  nullifierHash    String    @unique
+  boundAt          TimestamptzString @default(now())
+  expiresAt        TimestamptzString
+}

@@ -28,6 +28,8 @@ import { GuardianDecision, GuardianDecisionType } from '../domain/guardian-decis
 import { TreasuryMandate } from '../domain/treasury-mandate.entity';
 import { TreasuryActionApprovalParams } from '../crypto/interfaces/eip712.interface';
 import { LedgerClearSignPrompt } from '../ledger/interfaces/ledger-keyring.interface';
+import { OnChainExecutorService } from '../blockchain/on-chain-executor.service';
+import { Optional } from '@nestjs/common';
 
 @Controller('actions')
 export class ActionsController {
@@ -40,6 +42,7 @@ export class ActionsController {
     private readonly ledgerService: LedgerKeyRingService,
     private readonly worldSelfieService: WorldSelfieService,
     private readonly eventsGateway: EventsGateway,
+    @Optional() private readonly onChainExecutor?: OnChainExecutorService,
   ) {}
 
   private computeMandateHash(mandate: TreasuryMandate): string {
@@ -130,7 +133,13 @@ export class ActionsController {
     this.actionStore.updateStatus(action.id, TreasuryActionStatus.APPROVED);
     this.eventsGateway.emitActionApproved({ action });
 
-    return { action, decision };
+    const approvedAction = { ...action };
+
+    if (this.onChainExecutor) {
+      this.onChainExecutor.executeAutonomousPayment(action).catch(() => {});
+    }
+
+    return { action: approvedAction, decision };
   }
 
   @Get()
@@ -247,6 +256,10 @@ export class ActionsController {
       executionPayload: { approval: approvalParams, signature: dto.signature },
       safeTxData: encodedPayload,
     });
+
+    if (this.onChainExecutor) {
+      this.onChainExecutor.executeEscalatedPayment(action, dto.signature).catch(() => {});
+    }
 
     return {
       action,

@@ -37,6 +37,32 @@ describe('PolicyEngineService', () => {
     service = new PolicyEngineService();
   });
 
+  describe('Zero-Fallback Environment Validation', () => {
+    it('should throw if SAFE_ADDRESS is missing from environment', () => {
+      const orig = process.env.SAFE_ADDRESS;
+      delete process.env.SAFE_ADDRESS;
+      try {
+        expect(() => new PolicyEngineService()).toThrow(
+          'Missing required environment variable: SAFE_ADDRESS',
+        );
+      } finally {
+        process.env.SAFE_ADDRESS = orig;
+      }
+    });
+
+    it('should throw if GUARD_ADDRESS is missing from environment', () => {
+      const orig = process.env.GUARD_ADDRESS;
+      delete process.env.GUARD_ADDRESS;
+      try {
+        expect(() => new PolicyEngineService()).toThrow(
+          'Missing required environment variable: GUARD_ADDRESS',
+        );
+      } finally {
+        process.env.GUARD_ADDRESS = orig;
+      }
+    });
+  });
+
   it('should ALLOW autonomous action when within limit and recipient is whitelisted', () => {
     const action = createMockAction(validRecipient, '40000000');
     const result = service.evaluateDeterministicRules(action);

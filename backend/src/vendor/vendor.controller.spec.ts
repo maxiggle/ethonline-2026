@@ -1,17 +1,14 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { ForbiddenException, HttpException, HttpStatus } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, HttpException, HttpStatus, NotFoundException } from '@nestjs/common';
 import { GUARDS_METADATA } from '@nestjs/common/constants';
 import { VendorController } from './vendor.controller';
 import { DiscoveryController } from './discovery.controller';
 import { VendorService } from './vendor.service';
 import { OnChainExecutorService } from '../blockchain/on-chain-executor.service';
-import { ActionStoreService } from '../actions/action-store.service';
-import { PolicyEngineService } from '../policies/policy-engine.service';
-import { Eip712Service } from '../crypto/eip712.service';
-import { EventsGateway } from '../gateway/events.gateway';
-import { TreasuryActionStatus } from '../domain/treasury-action.entity';
+import { DatabaseModule } from '../database/database.module';
 import { ActionsController } from '../actions/actions.controller';
 import { AgentsService } from '../agents/agents.service';
+import { GuardianDecisionType } from '../domain/guardian-decision.entity';
 import { PrivyAuthGuard } from '../auth/guards/privy-auth.guard';
 import { AuthenticatedRequest } from '../auth/interfaces/authenticated-request.interface';
 import { Response } from 'express';
@@ -19,8 +16,7 @@ import { Response } from 'express';
 describe('VendorController (x402 Protocol & Company Bills)', () => {
   let controller: VendorController;
   let vendorService: VendorService;
-  let actionStore: ActionStoreService;
-  let onChainExecutor: OnChainExecutorService;
+  let onChainExecutor: { verifyTokenTransfer: jest.Mock };
 
   const agentAddress = '0x1111111111111111111111111111111111111111';
   const ownerRequest = {
@@ -29,23 +25,24 @@ describe('VendorController (x402 Protocol & Company Bills)', () => {
 
   const agentsService = { assertAgentOwnership: jest.fn() };
 
+  const allowDecision = (actionOverrides: Record<string, any> = {}) => ({
+    action: {
+      id: 'act_test_123',
+      status: 'APPROVED',
+      txHash: '0x98b5a4d65ba45e45c4ccc5a0fea57929d91bdd7bc19b46a5cba5dd32b7a12343',
+      ...actionOverrides,
+    },
+    decision: {
+      actionId: 'act_test_123',
+      decision: GuardianDecisionType.ALLOW,
+      riskScore: 10,
+      reasons: ['Transaction complies with all deterministic mandate constraints.'],
+      requiresHumanApproval: false,
+    },
+  });
+
   const mockActionsController = {
-    proposeAction: jest.fn().mockImplementation((dto) => {
-      return Promise.resolve({
-        action: {
-          id: 'act_test_123',
-          ...dto,
-          status: TreasuryActionStatus.APPROVED,
-          txHash: '0x98b5a4d65ba45e45c4ccc5a0fea57929d91bdd7bc19b46a5cba5dd32b7a12343',
-        },
-        decision: {
-          actionId: 'act_test_123',
-          decision: 'ALLOW',
-          riskScore: 10,
-          requiresHumanApproval: false,
-        },
-      });
-    }),
+    proposeAction: jest.fn().mockImplementation(() => Promise.resolve(allowDecision())),
   };
 
   const buildUnpaidBill = () => ({
@@ -69,6 +66,11 @@ describe('VendorController (x402 Protocol & Company Bills)', () => {
     },
   });
 
+  const verifiedTransfer = (amount = 40_000_000n) => ({
+    verified: true as const,
+    transferredAmount: amount,
+  });
+
   beforeEach(async () => {
     process.env.RPC_URL = 'https://sepolia.base.org';
     process.env.SAFE_ADDRESS = '0x4f712dd78Cb1a504C69CB4f68B82Fddb6b3b1df6';
@@ -76,22 +78,19 @@ describe('VendorController (x402 Protocol & Company Bills)', () => {
     process.env.CHAIN_ID = '84532';
 
     mockActionsController.proposeAction.mockClear();
+    mockActionsController.proposeAction.mockImplementation(() => Promise.resolve(allowDecision()));
     agentsService.assertAgentOwnership.mockReset();
     agentsService.assertAgentOwnership.mockResolvedValue(undefined);
 
+    const mockOnChainExecutor = { verifyTokenTransfer: jest.fn().mockResolvedValue(verifiedTransfer()) };
+
     const module: TestingModule = await Test.createTestingModule({
-      controllers: [VendorController],
+      imports: [DatabaseModule],
+      controllers: [VendorController, DiscoveryController],
       providers: [
         VendorService,
-        OnChainExecutorService,
-        ActionStoreService,
-        PolicyEngineService,
-        Eip712Service,
-        EventsGateway,
-        {
-          provide: ActionsController,
-          useValue: mockActionsController,
-        },
+        { provide: OnChainExecutorService, useValue: mockOnChainExecutor },
+        { provide: ActionsController, useValue: mockActionsController },
         { provide: AgentsService, useValue: agentsService },
       ],
     })
@@ -101,8 +100,7 @@ describe('VendorController (x402 Protocol & Company Bills)', () => {
 
     controller = module.get<VendorController>(VendorController);
     vendorService = module.get<VendorService>(VendorService);
-    actionStore = module.get<ActionStoreService>(ActionStoreService);
-    onChainExecutor = module.get<OnChainExecutorService>(OnChainExecutorService);
+    onChainExecutor = module.get(OnChainExecutorService);
   });
 
   it('should be defined', () => {
@@ -169,12 +167,7 @@ describe('VendorController (x402 Protocol & Company Bills)', () => {
     it('should throw HTTP 402 with X-Payment-Identifier when bill is unpaid', async () => {
       vendorService.addBill(buildUnpaidBill());
 
-      const headersMap: Record<string, string> = {};
-      const mockRes = {
-        setHeader: jest.fn((key: string, val: string) => {
-          headersMap[key] = val;
-        }),
-      } as unknown as Response;
+      const mockRes = { setHeader: jest.fn() } as unknown as Response;
 
       try {
         await controller.getBill('bill_test_01', undefined, mockRes);
@@ -202,8 +195,13 @@ describe('VendorController (x402 Protocol & Company Bills)', () => {
         agentAddress,
       );
       expect(mockActionsController.proposeAction).toHaveBeenCalled();
+      expect(onChainExecutor.verifyTokenTransfer).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({ minimumAmount: 40_000_000n }),
+      );
       expect(result.bill.status).toBe('SETTLED_200');
       expect(result.bill.txHash).toBeDefined();
+      expect(result.settlementError).toBeUndefined();
     });
 
     it('should refuse to pay a bill with an agent the caller does not own', async () => {
@@ -217,16 +215,36 @@ describe('VendorController (x402 Protocol & Company Bills)', () => {
       expect(mockActionsController.proposeAction).not.toHaveBeenCalled();
       expect(vendorService.getBillById('bill_test_01')?.status).toBe('UNPAID_402');
     });
+
+    it('should leave the bill UNPAID_402 when payment verification fails', async () => {
+      vendorService.addBill(buildUnpaidBill());
+      onChainExecutor.verifyTokenTransfer.mockResolvedValue({
+        verified: false,
+        error: 'Underpayment',
+      });
+
+      const result = await controller.payBill(ownerRequest, 'bill_test_01', { agentAddress });
+
+      expect(result.bill.status).toBe('UNPAID_402');
+      expect(result.settlementError).toBeDefined();
+    });
+
+    it('should settle only the bill that was paid, not another unpaid bill', async () => {
+      const billA = buildUnpaidBill();
+      const billB = { ...buildUnpaidBill(), id: 'bill_test_02', invoiceNumber: 'INV-TEST-8813' };
+      vendorService.addBill(billA);
+      vendorService.addBill(billB);
+
+      await controller.payBill(ownerRequest, 'bill_test_02', { agentAddress });
+
+      expect(vendorService.getBillById('bill_test_02')?.status).toBe('SETTLED_200');
+      expect(vendorService.getBillById('bill_test_01')?.status).toBe('UNPAID_402');
+    });
   });
 
   describe('HTTP 402 Payment Required Challenge (Compute)', () => {
     it('should throw HTTP 402 with required payment headers when X-Payment-TxHash is missing', async () => {
-      const headersMap: Record<string, string> = {};
-      const mockRes = {
-        setHeader: jest.fn((key: string, val: string) => {
-          headersMap[key] = val;
-        }),
-      } as unknown as Response;
+      const mockRes = { setHeader: jest.fn() } as unknown as Response;
 
       try {
         await controller.getComputeResource(undefined, mockRes);
@@ -250,31 +268,71 @@ describe('VendorController (x402 Protocol & Company Bills)', () => {
   });
 
   describe('HTTP 200 OK Payment Verification & Access Grant (Compute)', () => {
-    it('should unlock compute resource when valid payment action exists in action store', async () => {
-      const mockRes = {
-        setHeader: jest.fn(),
-      } as unknown as Response;
-
+    it('should unlock compute only after on-chain verification, called with the compute requirements', async () => {
+      const mockRes = { setHeader: jest.fn() } as unknown as Response;
       const realTxHash = '0x98b5a4d65ba45e45c4ccc5a0fea57929d91bdd7bc19b46a5cba5dd32b7a12343';
-      const action = actionStore.createAction({
-        target: process.env.SAFE_ADDRESS!,
-        value: '0',
-        data: '0x',
-        token: process.env.SAFE_ADDRESS!,
-        recipient: vendorService.vendorAddress,
-        amount: '40000000',
-        agentAddress,
-        justification: 'x402 compute payment',
-      });
-      actionStore.updateStatus(action.id, TreasuryActionStatus.EXECUTED, { txHash: realTxHash });
 
       const response = await controller.getComputeResource(realTxHash, mockRes);
 
+      expect(onChainExecutor.verifyTokenTransfer).toHaveBeenCalledWith(
+        realTxHash,
+        expect.objectContaining({
+          recipient: vendorService.vendorAddress,
+          minimumAmount: 40_000_000n,
+        }),
+      );
       expect(response.status).toBe('UNLOCKED');
       expect(response.resource).toBe('compute:dedicated-cluster:h100-gpu-node-01');
       expect(response.txHash).toBe(realTxHash);
       expect(response.sessionToken).toBeDefined();
       expect(response.details.allocatedVramGb).toBe(80);
+    });
+
+    it('should reject a replayed hash and verify only once', async () => {
+      const mockRes = { setHeader: jest.fn() } as unknown as Response;
+      const txHash = '0x98b5a4d65ba45e45c4ccc5a0fea57929d91bdd7bc19b46a5cba5dd32b7a12343';
+
+      await controller.getComputeResource(txHash, mockRes);
+      await expect(controller.getComputeResource(txHash, mockRes)).rejects.toThrow(
+        BadRequestException,
+      );
+
+      expect(onChainExecutor.verifyTokenTransfer).toHaveBeenCalledTimes(1);
+    });
+
+    it('should reject a malformed hash without calling verification', async () => {
+      const mockRes = { setHeader: jest.fn() } as unknown as Response;
+
+      await expect(controller.getComputeResource('not-a-hash', mockRes)).rejects.toThrow(
+        BadRequestException,
+      );
+      expect(onChainExecutor.verifyTokenTransfer).not.toHaveBeenCalled();
+    });
+
+    it('should reject an unverified payment', async () => {
+      const mockRes = { setHeader: jest.fn() } as unknown as Response;
+      onChainExecutor.verifyTokenTransfer.mockResolvedValue({
+        verified: false,
+        error: 'No matching Transfer log',
+      });
+
+      await expect(
+        controller.getComputeResource(
+          '0x98b5a4d65ba45e45c4ccc5a0fea57929d91bdd7bc19b46a5cba5dd32b7a12343',
+          mockRes,
+        ),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should not let a hash redeemed for compute also unlock weather', async () => {
+      const mockRes = { setHeader: jest.fn() } as unknown as Response;
+      const txHash = '0x98b5a4d65ba45e45c4ccc5a0fea57929d91bdd7bc19b46a5cba5dd32b7a12343';
+
+      await controller.getComputeResource(txHash, mockRes);
+
+      await expect(controller.getWeather('San Francisco', txHash, mockRes)).rejects.toThrow(
+        BadRequestException,
+      );
     });
   });
 
@@ -294,10 +352,16 @@ describe('VendorController (x402 Protocol & Company Bills)', () => {
   });
 
   describe('Weather Oracle x402 Endpoint', () => {
+    it('should require a city query parameter', async () => {
+      const mockRes = { setHeader: jest.fn() } as unknown as Response;
+
+      await expect(controller.getWeather(undefined, undefined, mockRes)).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+
     it('should throw HTTP 402 when payment header is missing', async () => {
-      const mockRes = {
-        setHeader: jest.fn(),
-      } as unknown as Response;
+      const mockRes = { setHeader: jest.fn() } as unknown as Response;
 
       try {
         await controller.getWeather('San Francisco', undefined, mockRes);
@@ -313,10 +377,9 @@ describe('VendorController (x402 Protocol & Company Bills)', () => {
       }
     });
 
-    it('should return live weather telemetry when payment txHash is provided', async () => {
-      const mockRes = {
-        setHeader: jest.fn(),
-      } as unknown as Response;
+    it('should return live weather telemetry when payment txHash is verified', async () => {
+      const mockRes = { setHeader: jest.fn() } as unknown as Response;
+      onChainExecutor.verifyTokenTransfer.mockResolvedValue(verifiedTransfer(1_000_000n));
       const txHash = '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef';
 
       const data = await controller.getWeather('San Francisco', txHash, mockRes);
@@ -329,6 +392,8 @@ describe('VendorController (x402 Protocol & Company Bills)', () => {
 
   describe('Service Invocation (invokeService)', () => {
     it('should autonomously settle and invoke weather service', async () => {
+      onChainExecutor.verifyTokenTransfer.mockResolvedValue(verifiedTransfer(1_000_000n));
+
       const result = await controller.invokeService(ownerRequest, {
         resourceUrl: 'https://chapter2-backend.onrender.com/vendor/weather',
         method: 'GET',
@@ -340,6 +405,56 @@ describe('VendorController (x402 Protocol & Company Bills)', () => {
       expect(result.costUsdc).toBe(1);
       expect(result.txHash).toBeDefined();
       expect(result.data?.city).toContain('San Francisco');
+    });
+
+    it('should return PENDING_SETTLEMENT and skip verification when no txHash exists yet', async () => {
+      mockActionsController.proposeAction.mockResolvedValue(
+        allowDecision({ txHash: undefined }),
+      );
+
+      const result = await controller.invokeService(ownerRequest, {
+        resourceUrl: 'https://chapter2-backend.onrender.com/vendor/weather',
+        method: 'GET',
+        params: { city: 'San Francisco' },
+        agentAddress,
+      });
+
+      expect(result.status).toBe('PENDING_SETTLEMENT');
+      expect(onChainExecutor.verifyTokenTransfer).not.toHaveBeenCalled();
+    });
+
+    it('should return BLOCKED when the guardian decision blocks the action', async () => {
+      mockActionsController.proposeAction.mockResolvedValue({
+        action: { id: 'act_blocked', status: 'REJECTED' },
+        decision: {
+          actionId: 'act_blocked',
+          decision: GuardianDecisionType.BLOCK,
+          riskScore: 100,
+          reasons: ['Recipient is not on the approved whitelist.'],
+          requiresHumanApproval: false,
+        },
+      });
+
+      const result = await controller.invokeService(ownerRequest, {
+        resourceUrl: 'https://chapter2-backend.onrender.com/vendor/compute',
+        method: 'GET',
+        agentAddress,
+      });
+
+      expect(result.status).toBe('BLOCKED');
+      expect(result.reason).toBe('Recipient is not on the approved whitelist.');
+    });
+
+    it('should reject an unknown resource without proposing a payment', async () => {
+      await expect(
+        controller.invokeService(ownerRequest, {
+          resourceUrl: 'https://chapter2-backend.onrender.com/vendor/does-not-exist',
+          method: 'GET',
+          agentAddress,
+        }),
+      ).rejects.toThrow(NotFoundException);
+
+      expect(mockActionsController.proposeAction).not.toHaveBeenCalled();
     });
   });
 });

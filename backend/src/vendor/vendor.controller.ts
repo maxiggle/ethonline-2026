@@ -98,7 +98,7 @@ export class VendorController {
     @Param('id') id: string,
     @Headers('x-payment-txhash') paymentTxHash: string | undefined,
     @Res({ passthrough: true }) res: Response,
-  ): Promise<CompanyBill | ComputeResourceGrant> {
+  ): Promise<CompanyBill> {
     const bill = this.vendorService.getBillById(id);
     if (!bill) {
       throw new NotFoundException(`Company bill with ID '${id}' not found`);
@@ -106,8 +106,7 @@ export class VendorController {
 
     // If payment header is present, verify on-chain settlement and unlock
     if (paymentTxHash) {
-      this.vendorService.markBillSettled(id, paymentTxHash);
-      return await this.vendorService.verifyAndGrantAccess(paymentTxHash);
+      return await this.vendorService.settleBillWithPayment(id, paymentTxHash);
     }
 
     // If already settled in store, return the settled bill
@@ -152,6 +151,7 @@ export class VendorController {
     action: any;
     decision: any;
     typedData?: any;
+    settlementError?: string;
   }> {
     const bill = this.vendorService.getBillById(id);
     if (!bill) {
@@ -182,9 +182,14 @@ export class VendorController {
 
     const proposalResult = await this.actionsController.proposeAction(proposePayload);
 
-    // If auto-approved/executed with txHash, mark the bill settled
+    // If a txHash exists already, settle immediately; otherwise it settles later via getBill/webhook
+    let settlementError: string | undefined;
     if (proposalResult.action.txHash) {
-      this.vendorService.markBillSettled(bill.id, proposalResult.action.txHash);
+      try {
+        await this.vendorService.settleBillWithPayment(bill.id, proposalResult.action.txHash);
+      } catch (err) {
+        settlementError = err.message;
+      }
     }
 
     return {
@@ -192,6 +197,7 @@ export class VendorController {
       action: proposalResult.action,
       decision: proposalResult.decision,
       typedData: proposalResult.typedData,
+      ...(settlementError ? { settlementError } : {}),
     };
   }
 
@@ -235,21 +241,18 @@ export class VendorController {
     @Headers('x-payment-txhash') paymentTxHash: string | undefined,
     @Res({ passthrough: true }) res: Response,
   ): Promise<Record<string, any>> {
-    const cityName = city || 'San Francisco';
-    const reqs = {
-      address: this.vendorService.vendorAddress,
-      amount: '1000000', // 1.00 USDC
-      token: this.vendorService.tokenAddress,
-      chainId: this.vendorService.chainId,
-      paymentIdentifier: 'weather_oracle_inv_004',
-    };
+    if (!city) {
+      throw new BadRequestException("Query parameter 'city' is required");
+    }
+
+    const reqs = this.vendorService.getWeatherPaymentRequirements();
 
     if (!paymentTxHash) {
       res.setHeader('X-Payment-Address', reqs.address);
       res.setHeader('X-Payment-Amount', reqs.amount);
       res.setHeader('X-Payment-Token', reqs.token);
       res.setHeader('X-Payment-ChainId', reqs.chainId.toString());
-      res.setHeader('X-Payment-Identifier', reqs.paymentIdentifier);
+      res.setHeader('X-Payment-Identifier', reqs.paymentIdentifier!);
 
       throw new HttpException(
         {
@@ -263,7 +266,7 @@ export class VendorController {
       );
     }
 
-    return this.vendorService.getWeatherTelemetry(cityName, paymentTxHash);
+    return this.vendorService.getPaidWeatherTelemetry(city, paymentTxHash);
   }
 
   @Post('invoke')

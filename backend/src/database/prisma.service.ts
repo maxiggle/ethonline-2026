@@ -1,4 +1,6 @@
 import { Injectable, OnModuleInit, OnModuleDestroy, Logger } from '@nestjs/common';
+import * as fs from 'fs';
+import * as path from 'path';
 
 @Injectable()
 export class PrismaService implements OnModuleInit, OnModuleDestroy {
@@ -11,7 +13,27 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
       // @ts-ignore
       const postgresMod = await import('@prisma/orm-postgres/runtime');
       const postgres = postgresMod.default || postgresMod;
-      const contractJson = require('../prisma/contract.json');
+
+      const candidates = [
+        path.resolve(__dirname, '../prisma/contract.json'),
+        path.resolve(__dirname, '../../src/prisma/contract.json'),
+        path.resolve(process.cwd(), 'src/prisma/contract.json'),
+        path.resolve(process.cwd(), 'backend/src/prisma/contract.json'),
+        path.resolve(process.cwd(), 'dist/src/prisma/contract.json'),
+        path.resolve(process.cwd(), 'backend/dist/src/prisma/contract.json'),
+      ];
+
+      let contractJson: any = null;
+      for (const p of candidates) {
+        if (fs.existsSync(p)) {
+          contractJson = JSON.parse(fs.readFileSync(p, 'utf-8'));
+          break;
+        }
+      }
+
+      if (!contractJson) {
+        throw new Error('contract.json not found in candidate paths');
+      }
 
       this.client = postgres({
         contractJson,

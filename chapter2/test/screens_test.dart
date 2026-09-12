@@ -8,7 +8,6 @@ import 'package:chapter2/features/auth/models/user_identity.dart';
 import 'package:chapter2/features/auth/services/auth_service.dart';
 import 'package:chapter2/features/dashboard/cubit/dashboard_cubit.dart';
 import 'package:chapter2/features/guardian_alert/view/guardian_analysis_sheet.dart';
-import 'package:chapter2/features/mandate/view/mandate_management_sheet.dart';
 import 'package:chapter2/features/settings/view/settings_screen.dart';
 import 'package:chapter2/features/timeline/models/treasury_action.dart';
 import 'package:chapter2/services/api/chapter2_api_service.dart';

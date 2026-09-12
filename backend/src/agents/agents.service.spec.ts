@@ -65,6 +65,26 @@ describe('AgentsService', () => {
       expect(isNotOwner).toBe(false);
     });
 
+    it('should reject callers that do not own an active agent', async () => {
+      const userId = 'did:privy:erin_test';
+      const agentAddress = '0x5555555555555555555555555555555555555555';
+      await service.bindAgent(userId, {
+        agentAddress,
+        name: 'Erin Agent',
+        safeAddress: '0x4f712dd78Cb1a504C69CB4f68B82Fddb6b3b1df6',
+        guardAddress: '0x9b6023D1B6D3b076C8d999Ba406AE486750ce7d3',
+        chainId: 84532,
+      });
+
+      await expect(service.assertAgentOwnership(userId, agentAddress)).resolves.toBeUndefined();
+      await expect(
+        service.assertAgentOwnership('did:privy:mallory', agentAddress),
+      ).rejects.toThrow('is not an active agent owned by the authenticated user');
+      await expect(
+        service.assertAgentOwnership(userId, '0x6666666666666666666666666666666666666666'),
+      ).rejects.toThrow('is not an active agent owned by the authenticated user');
+    });
+
     it('should auto-bind real user walletAddress when user exists', async () => {
       const userId = 'did:privy:dave_with_wallet';
       const realWallet = '0x4444444444444444444444444444444444444444';

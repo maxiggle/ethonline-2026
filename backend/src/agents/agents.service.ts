@@ -1,4 +1,11 @@
-import { Injectable, Logger, BadRequestException, NotFoundException, Optional } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  BadRequestException,
+  ForbiddenException,
+  NotFoundException,
+  Optional,
+} from '@nestjs/common';
 import { DatabaseService } from '../database/database.service';
 import { OnChainExecutorService } from '../blockchain/on-chain-executor.service';
 import { BindAgentDto } from './dto/bind-agent.dto';
@@ -163,5 +170,17 @@ export class AgentsService {
     const agent = await this.getAgentByAddress(agentAddress);
     if (!agent) return false;
     return agent.userId === userId && agent.status === 'ACTIVE';
+  }
+
+  /**
+   * Rejects the request unless the agent address is an ACTIVE agent owned by the user.
+   */
+  async assertAgentOwnership(userId: string, agentAddress: string): Promise<void> {
+    const isOwnedActiveAgent = await this.verifyAgentOwnership(userId, agentAddress);
+    if (!isOwnedActiveAgent) {
+      throw new ForbiddenException(
+        `Agent ${agentAddress} is not an active agent owned by the authenticated user`,
+      );
+    }
   }
 }

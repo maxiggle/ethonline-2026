@@ -44,3 +44,10 @@ export interface HumanBindingRow {
   bound_at: string;
   expires_at: string;
 }
+
+export interface X402PaymentReceiptRow {
+  tx_hash: string;
+  resource: string;
+  amount: string;
+  redeemed_at: string;
+}

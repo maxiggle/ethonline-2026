@@ -76,4 +76,24 @@ describe('DatabaseService', () => {
     expect(binding).toBeDefined();
     expect(binding.nullifier_hash).toBe(nullifier);
   });
+
+  it('should redeem an x402 payment receipt once and reject a replay', async () => {
+    const txHash = `0x${[...Array(64)].map(() => Math.floor(Math.random() * 16).toString(16)).join('')}`;
+
+    const firstInsert = await service.run(
+      `INSERT INTO x402_payment_receipts (tx_hash, resource, amount, redeemed_at) VALUES (?, ?, ?, ?) ON CONFLICT (tx_hash) DO NOTHING`,
+      [txHash, 'vendor:compute', '1000000', new Date().toISOString()],
+    );
+    expect(firstInsert.changes).toBe(1);
+
+    const replayInsert = await service.run(
+      `INSERT INTO x402_payment_receipts (tx_hash, resource, amount, redeemed_at) VALUES (?, ?, ?, ?) ON CONFLICT (tx_hash) DO NOTHING`,
+      [txHash, 'bill:some-other-bill', '2000000', new Date().toISOString()],
+    );
+    expect(replayInsert.changes).toBe(0);
+
+    const receipt = await service.getOne('SELECT * FROM x402_payment_receipts WHERE tx_hash = ?', [txHash]);
+    expect(receipt).toBeDefined();
+    expect(receipt.resource).toBe('vendor:compute');
+  });
 });

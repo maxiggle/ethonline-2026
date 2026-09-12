@@ -7,6 +7,7 @@ import {
   TreasuryMandateRow,
   DailySpentLedgerRow,
   HumanBindingRow,
+  X402PaymentReceiptRow,
 } from './database.interface';
 
 interface InMemoryState {
@@ -16,6 +17,7 @@ interface InMemoryState {
   treasuryMandates: Map<string, TreasuryMandateRow>;
   dailySpentLedger: Map<number, DailySpentLedgerRow>;
   humanBindings: Map<string, HumanBindingRow>;
+  x402PaymentReceipts: Map<string, X402PaymentReceiptRow>;
 }
 
 @Injectable()
@@ -33,6 +35,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     treasuryMandates: new Map(),
     dailySpentLedger: new Map(),
     humanBindings: new Map(),
+    x402PaymentReceipts: new Map(),
   };
 
   constructor() {}
@@ -144,6 +147,13 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
         nullifier_hash VARCHAR(128) NOT NULL,
         bound_at TIMESTAMPTZ NOT NULL,
         expires_at TIMESTAMPTZ NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS x402_payment_receipts (
+        tx_hash VARCHAR(128) PRIMARY KEY,
+        resource VARCHAR(256) NOT NULL,
+        amount VARCHAR(64) NOT NULL,
+        redeemed_at TIMESTAMPTZ NOT NULL
       );
 
       CREATE TABLE IF NOT EXISTS "user" (
@@ -259,6 +269,16 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
           expires_at: new Date(row.expires_at).toISOString(),
         });
       }
+
+      const receiptsRes = await this.pgPool.query<X402PaymentReceiptRow>(
+        'SELECT * FROM x402_payment_receipts',
+      );
+      for (const row of receiptsRes.rows) {
+        this.state.x402PaymentReceipts.set(row.tx_hash.toLowerCase(), {
+          ...row,
+          redeemed_at: new Date(row.redeemed_at).toISOString(),
+        });
+      }
     } catch (err: any) {
       this.logger.error(`Error loading state from PostgreSQL: ${err.message}`);
     }
@@ -289,6 +309,9 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
       if (data.humanBindings) {
         this.state.humanBindings = new Map(Object.entries(data.humanBindings));
       }
+      if (data.x402PaymentReceipts) {
+        this.state.x402PaymentReceipts = new Map(Object.entries(data.x402PaymentReceipts));
+      }
     } catch (err: any) {
       this.logger.error(`Error reading persistence file: ${err.message}`);
     }
@@ -309,6 +332,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
         treasuryMandates: Object.fromEntries(this.state.treasuryMandates),
         dailySpentLedger: Object.fromEntries(this.state.dailySpentLedger),
         humanBindings: Object.fromEntries(this.state.humanBindings),
+        x402PaymentReceipts: Object.fromEntries(this.state.x402PaymentReceipts),
       };
       fs.writeFileSync(this.filePath, JSON.stringify(data, null, 2), 'utf-8');
     } catch (err: any) {
@@ -416,6 +440,14 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
         return [];
       }
       return Array.from(this.state.humanBindings.values()) as unknown as T[];
+    }
+
+    if (s.includes('FROM X402_PAYMENT_RECEIPTS')) {
+      if (s.includes('WHERE TX_HASH =')) {
+        const item = this.state.x402PaymentReceipts.get(String(params[0]).toLowerCase());
+        return item ? ([item] as unknown as T[]) : [];
+      }
+      return Array.from(this.state.x402PaymentReceipts.values()) as unknown as T[];
     }
 
     if (s.includes('FROM "USER"') || s.includes('FROM USER ') || s.includes('FROM USERS')) {
@@ -576,7 +608,25 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
       return { changes: 1 };
     }
 
-    // 5. User Identity
+    // 5. x402 Payment Receipts (insert-once: a redeemed tx hash can never be inserted again)
+    if (s.includes('INTO X402_PAYMENT_RECEIPTS')) {
+      const [tx_hash, resource, amount, redeemed_at] = params;
+      const key = String(tx_hash).toLowerCase();
+      if (this.state.x402PaymentReceipts.has(key)) {
+        return { changes: 0 };
+      }
+      this.state.x402PaymentReceipts.set(key, {
+        tx_hash: key,
+        resource: String(resource),
+        amount: String(amount),
+        redeemed_at: String(redeemed_at),
+      });
+      this.saveToFile();
+      this.asyncWriteToPostgres(sql, params);
+      return { changes: 1 };
+    }
+
+    // 6. User Identity
     if (s.startsWith('UPDATE "USER"') || s.startsWith('UPDATE "USERS"') || s.startsWith('UPDATE USER ')) {
       if (s.includes('DELETEDAT')) {
         const [deletedAt, updatedAt, id] = params;
@@ -620,7 +670,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
       return { changes: 1 };
     }
 
-    // 6. Agent Management
+    // 7. Agent Management
     if (s.includes('INTO AGENT') || s.includes('INTO "AGENT"') || s.includes('INTO AGENTS')) {
       const [id, userId, agentAddress, name, purpose, safeAddress, guardAddress, chainId, status, createdAt, updatedAt] = params;
       const agent = {

@@ -1,0 +1,171 @@
+:root {
+  color-scheme: light;
+  --background: #0b0f14;
+  --surface: #131a22;
+  --surface-raised: #1b2530;
+  --border: #263342;
+  --text: #e6edf3;
+  --text-muted: #8b98a5;
+  --accent: #4f9cff;
+  --allow: #3fbf6f;
+  --escalate: #e8a53d;
+  --block: #e0525a;
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--background);
+  color: var(--text);
+}
+
+#app {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 24px 16px 64px;
+}
+
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+h1 {
+  font-size: 1.15rem;
+  margin: 0;
+}
+
+button {
+  font: inherit;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface-raised);
+  color: var(--text);
+  padding: 8px 14px;
+  cursor: pointer;
+}
+
+button:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #04101f;
+  font-weight: 600;
+}
+
+button.danger {
+  border-color: var(--block);
+  color: var(--block);
+}
+
+.banner {
+  padding: 10px 14px;
+  border-radius: 8px;
+  margin-bottom: 14px;
+  font-size: 0.9rem;
+}
+
+.banner.warning {
+  background: rgba(232, 165, 61, 0.12);
+  border: 1px solid var(--escalate);
+  color: var(--escalate);
+}
+
+.banner.error {
+  background: rgba(224, 82, 90, 0.12);
+  border: 1px solid var(--block);
+  color: var(--block);
+}
+
+.banner.info {
+  background: rgba(79, 156, 255, 0.12);
+  border: 1px solid var(--accent);
+  color: var(--accent);
+}
+
+.connection-status {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 14px;
+}
+
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.card-amount {
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+
+.risk-score {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+dl.card-fields {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 12px;
+  margin: 12px 0;
+  font-size: 0.88rem;
+}
+
+dl.card-fields dt {
+  color: var(--text-muted);
+}
+
+dl.card-fields dd {
+  margin: 0;
+  word-break: break-all;
+}
+
+.reasons {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  margin: 8px 0;
+}
+
+.card-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.card-status {
+  font-size: 0.85rem;
+  margin-top: 10px;
+  color: var(--accent);
+}
+
+.empty-state {
+  color: var(--text-muted);
+  text-align: center;
+  padding: 40px 0;
+}

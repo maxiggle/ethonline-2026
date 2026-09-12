@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException, Logger } from '@nestjs/common';
+import { Injectable, BadRequestException, Logger, ServiceUnavailableException } from '@nestjs/common';
 import { Wallet, getAddress } from 'ethers';
 import * as crypto from 'crypto';
 import { spawn } from 'child_process';
@@ -27,33 +27,63 @@ import {
   CLEAR_SIGN_TITLE,
 } from './ledger.constants';
 
+function isTestEnvironment(): boolean {
+  return process.env.NODE_ENV === 'test';
+}
+
 @Injectable()
 export class LedgerKeyRingService {
   private readonly logger = new Logger(LedgerKeyRingService.name);
   private mode: LedgerMode;
-  private signerWallet: Wallet;
+  private signerWallet: Wallet | null;
   private derivationPath: string;
   private cliBinaryPath: string;
   private readonly secretVault = new Map<string, KeyRingSecret>();
   private masterRingKey: Buffer;
 
   constructor(private readonly eip712Service: Eip712Service) {
-    this.mode = (process.env.LEDGER_MODE as LedgerMode) || 'MOCK_HARDWARE';
+    this.mode = this.resolveLedgerMode(process.env.LEDGER_MODE as LedgerMode | undefined);
     this.derivationPath = process.env.LEDGER_DERIVATION_PATH || DEFAULT_DERIVATION_PATH;
     this.cliBinaryPath = process.env.LEDGER_CLI_PATH || DEFAULT_WALLET_CLI_COMMAND;
 
-    const privateKey = process.env.LEDGER_SIGNER_PRIVATE_KEY || DEFAULT_MOCK_LEDGER_KEY;
-    this.signerWallet = new Wallet(privateKey);
+    // The canonical 0xA11CE key is public (Foundry test vector) and must never sign outside jest
+    const privateKey =
+      process.env.LEDGER_SIGNER_PRIVATE_KEY ?? (isTestEnvironment() ? DEFAULT_MOCK_LEDGER_KEY : undefined);
+    this.signerWallet = privateKey ? new Wallet(privateKey) : null;
 
     // Derive 32-byte key for AES-256-GCM headless LKRP operations
     const ringPassphrase = process.env.WALLET_PASS || 'chapter2_secure_ledger_ring_master';
     this.masterRingKey = crypto.scryptSync(ringPassphrase, 'ledger_keyring_salt', 32);
   }
 
+  private resolveLedgerMode(configuredMode?: LedgerMode): LedgerMode {
+    if (configuredMode) {
+      this.assertModeAllowed(configuredMode);
+      return configuredMode;
+    }
+    return isTestEnvironment() ? 'MOCK_HARDWARE' : 'HEADLESS_CLI';
+  }
+
+  private assertModeAllowed(mode: LedgerMode): void {
+    if (mode === 'MOCK_HARDWARE' && !isTestEnvironment()) {
+      throw new Error('LEDGER_MODE=MOCK_HARDWARE is only permitted under test');
+    }
+  }
+
+  private requireSignerWallet(): Wallet {
+    if (!this.signerWallet) {
+      throw new ServiceUnavailableException(
+        'No Ledger signer is configured on this server (LEDGER_SIGNER_PRIVATE_KEY)',
+      );
+    }
+    return this.signerWallet;
+  }
+
   /**
    * Sets the operational mode (MOCK_HARDWARE, HEADLESS_CLI, DIRECT_TRANSPORT).
    */
   setMode(newMode: LedgerMode): void {
+    this.assertModeAllowed(newMode);
     this.mode = newMode;
   }
 
@@ -62,10 +92,10 @@ export class LedgerKeyRingService {
    */
   async getStatus(): Promise<LedgerDeviceStatus> {
     return {
-      connected: true,
+      connected: this.signerWallet !== null,
       mode: this.mode,
       model: DEFAULT_LEDGER_MODEL,
-      address: getAddress(this.signerWallet.address),
+      address: this.signerWallet ? getAddress(this.signerWallet.address) : null,
       derivationPath: this.derivationPath,
       keyRingInitialized: true,
     };
@@ -75,7 +105,7 @@ export class LedgerKeyRingService {
    * Returns the checksummed address of the authorized Ledger human signer.
    */
   async getSignerAddress(): Promise<string> {
-    return getAddress(this.signerWallet.address);
+    return getAddress(this.requireSignerWallet().address);
   }
 
   /**
@@ -155,26 +185,19 @@ export class LedgerKeyRingService {
     approval: TreasuryActionApprovalParams,
     domain: Eip712Domain = DEFAULT_BASE_SEPOLIA_DOMAIN,
   ): Promise<KeyRingSignResult> {
+    const signerWallet = this.requireSignerWallet();
     const digest = this.eip712Service.computeDigest(approval, domain);
 
-    let signature: string;
-
-    if (this.mode === 'HEADLESS_CLI') {
-      try {
-        signature = await this.signViaCli(digest);
-      } catch (error) {
-        this.logger.warn(`CLI signing failed, falling back to secure key ring: ${error.message}`);
-        signature = await this.signViaSoftwareKeyRing(approval, domain);
-      }
-    } else {
-      signature = await this.signViaSoftwareKeyRing(approval, domain);
-    }
+    const signature =
+      this.mode === 'HEADLESS_CLI'
+        ? await this.signViaCli(digest)
+        : await this.signViaSoftwareKeyRing(signerWallet, approval, domain);
 
     // Verify signature passes Eip712Service validation
     const isValid = this.eip712Service.verifySignature(
       approval,
       signature,
-      this.signerWallet.address,
+      signerWallet.address,
       domain,
     );
 
@@ -187,7 +210,7 @@ export class LedgerKeyRingService {
 
     return {
       signature,
-      signer: getAddress(this.signerWallet.address),
+      signer: getAddress(signerWallet.address),
       digest,
       encodedPayload,
       timestamp: Date.now(),
@@ -205,7 +228,7 @@ export class LedgerKeyRingService {
     return this.eip712Service.verifySignature(
       approval,
       signature,
-      this.signerWallet.address,
+      this.requireSignerWallet().address,
       domain,
     );
   }
@@ -293,10 +316,11 @@ export class LedgerKeyRingService {
   }
 
   private async signViaSoftwareKeyRing(
+    signerWallet: Wallet,
     approval: TreasuryActionApprovalParams,
     domain: Eip712Domain,
   ): Promise<string> {
-    return this.signerWallet.signTypedData(
+    return signerWallet.signTypedData(
       {
         name: domain.name,
         version: domain.version,

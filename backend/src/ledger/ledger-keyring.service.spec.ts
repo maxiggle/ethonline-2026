@@ -63,6 +63,50 @@ describe('LedgerKeyRingService', () => {
 
       service.setMode('MOCK_HARDWARE');
     });
+
+    describe('outside the test environment', () => {
+      const originalEnvironment = {
+        NODE_ENV: process.env.NODE_ENV,
+        LEDGER_MODE: process.env.LEDGER_MODE,
+        LEDGER_SIGNER_PRIVATE_KEY: process.env.LEDGER_SIGNER_PRIVATE_KEY,
+      };
+
+      beforeEach(() => {
+        process.env.NODE_ENV = 'production';
+        delete process.env.LEDGER_MODE;
+        delete process.env.LEDGER_SIGNER_PRIVATE_KEY;
+      });
+
+      afterEach(() => {
+        for (const [key, value] of Object.entries(originalEnvironment)) {
+          if (value === undefined) {
+            delete process.env[key];
+          } else {
+            process.env[key] = value;
+          }
+        }
+      });
+
+      it('should not load the publicly known mock Ledger key', async () => {
+        const productionService = new LedgerKeyRingService(eip712Service);
+        const status = await productionService.getStatus();
+
+        expect(status.connected).toBe(false);
+        expect(status.address).toBeNull();
+        expect(status.mode).toBe('HEADLESS_CLI');
+        await expect(productionService.getSignerAddress()).rejects.toThrow('No Ledger signer');
+        await expect(productionService.signApproval(mockApprovalParams)).rejects.toThrow(
+          'No Ledger signer',
+        );
+      });
+
+      it('should refuse MOCK_HARDWARE mode', () => {
+        process.env.LEDGER_MODE = 'MOCK_HARDWARE';
+
+        expect(() => new LedgerKeyRingService(eip712Service)).toThrow('MOCK_HARDWARE');
+        expect(() => service.setMode('MOCK_HARDWARE')).toThrow('MOCK_HARDWARE');
+      });
+    });
   });
 
   describe('Clear-Signing Prompt Formatting', () => {

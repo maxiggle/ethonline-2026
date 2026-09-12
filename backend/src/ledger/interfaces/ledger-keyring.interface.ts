@@ -6,7 +6,7 @@ export interface LedgerDeviceStatus {
   connected: boolean;
   mode: LedgerMode;
   model: string;
-  address: string;
+  address: string | null;
   derivationPath: string;
   keyRingInitialized: boolean;
 }

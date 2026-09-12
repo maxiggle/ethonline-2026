@@ -1,10 +1,12 @@
-import { Injectable, BadRequestException, NotFoundException, Logger } from '@nestjs/common';
+import { Inject, Injectable, BadRequestException, NotFoundException, Logger } from '@nestjs/common';
 import { OnChainExecutorService } from '../blockchain/on-chain-executor.service';
 import { ActionsController } from '../actions/actions.controller';
 import { ProposeActionDto } from '../domain/dto/propose-action.dto';
 import { GuardianDecisionType } from '../domain/guardian-decision.entity';
 import { DatabaseService } from '../database/database.service';
 import { X402PaymentReceiptRow } from '../database/database.interface';
+import { X402_CONFIG } from '../x402/x402.constants';
+import { X402Config } from '../x402/x402.config';
 
 const TX_HASH_PATTERN = /^0x[0-9a-fA-F]{64}$/;
 
@@ -121,6 +123,7 @@ export class VendorService {
     private readonly onChainExecutor: OnChainExecutorService,
     private readonly actionsController: ActionsController,
     private readonly databaseService: DatabaseService,
+    @Inject(X402_CONFIG) private readonly x402Config: X402Config,
   ) {
     const safeAddress = process.env.SAFE_ADDRESS;
     if (!safeAddress) {
@@ -329,51 +332,43 @@ export class VendorService {
 
   // --- Bazaar Discovery Catalog ---
   getBazaarCatalog(): BazaarResource[] {
-    const baseUrl = process.env.RENDER_EXTERNAL_URL || 'https://chapter2-backend.onrender.com';
+    const baseUrl = this.x402Config.publicBaseUrl;
+    const { network, usdcAddress: asset, payToAddress, partnerPayToAddress } = this.x402Config;
 
     return [
       {
-        resource: `${baseUrl}/vendor/weather`,
+        resource: `${baseUrl}/x402/weather`,
         type: 'http',
         x402Version: 2,
         lastUpdated: new Date().toISOString(),
         accepts: [
           {
-            network: `eip155:${this.chainId}`,
-            asset: this.tokenAddress,
-            amount: '1000000', // 1.00 USDC
-            payTo: this.vendorAddress,
+            network,
+            asset,
+            amount: '10000', // $0.01
+            payTo: payToAddress,
             scheme: 'exact',
-            extra: {
-              name: 'USD Coin',
-              version: '2',
-              paymentIdentifier: 'weather_oracle_inv_004',
-            },
           },
         ],
         extensions: {
           bazaar: {
             info: {
-              serviceName: 'AccuWeather & Climate Intelligence Oracle',
-              description:
-                'Hyper-local real-time weather telemetry, radar forecasting, and climate oracle feed',
-              tags: ['weather', 'climate', 'api', 'forecasting', 'radar', 'oracle', 'environment'],
+              serviceName: 'Open-Meteo Weather Oracle',
+              description: 'Real-time weather telemetry from Open-Meteo for a given city',
+              tags: ['weather', 'climate', 'oracle', 'open-meteo'],
               input: {
                 type: 'http',
                 method: 'GET',
-                queryParams: {
-                  city: 'San Francisco',
-                  units: 'metric',
-                },
+                queryParams: { city: 'Lagos' },
               },
               output: {
                 type: 'json',
                 example: {
-                  city: 'San Francisco',
-                  temperatureC: 18.5,
-                  conditions: 'Partly Cloudy',
-                  humidity: 68,
-                  windSpeedKph: 14.2,
+                  city: 'Lagos',
+                  temperatureC: 29.4,
+                  humidity: 77,
+                  windSpeedKph: 11.2,
+                  source: 'open-meteo.com',
                 },
               },
             },
@@ -381,45 +376,70 @@ export class VendorService {
         },
       },
       {
-        resource: `${baseUrl}/vendor/compute`,
+        resource: `${baseUrl}/x402/chain-report`,
         type: 'http',
         x402Version: 2,
         lastUpdated: new Date().toISOString(),
         accepts: [
           {
-            network: `eip155:${this.chainId}`,
-            asset: this.tokenAddress,
-            amount: '40000000', // 40.00 USDC
-            payTo: this.vendorAddress,
+            network,
+            asset,
+            amount: '2000000', // $2.00
+            payTo: payToAddress,
             scheme: 'exact',
-            extra: {
-              name: 'USD Coin',
-              version: '2',
-              paymentIdentifier: 'compute_cluster_session_01',
-            },
           },
         ],
         extensions: {
           bazaar: {
             info: {
-              serviceName: 'Decentralized GPU Compute & AI Inference',
-              description:
-                'Autonomous H100 GPU compute cluster allocation, model inference, and fine-tuning',
-              tags: ['compute', 'gpu', 'ai', 'inference', 'h100', 'cluster', 'nvidia'],
+              serviceName: 'Base Sepolia Chain Report',
+              description: 'Live Base Sepolia chain report: latest block, fee data and USDC supply',
+              tags: ['chain', 'base-sepolia', 'rpc', 'usdc'],
               input: {
                 type: 'http',
                 method: 'GET',
-                queryParams: {
-                  clusterId: 'vertex-h100-node-01',
-                },
               },
               output: {
                 type: 'json',
                 example: {
-                  status: 'UNLOCKED',
-                  sessionToken: 'sess_live_cluster_alloc',
-                  specs: '1x NVIDIA H100 Tensor Core GPU (80GB SXM5)',
-                  allocatedVramGb: 80,
+                  network: 'eip155:84532',
+                  blockNumber: 12345678,
+                  usdc: { decimals: 6, totalSupply: '123456000000' },
+                },
+              },
+            },
+          },
+        },
+      },
+      {
+        resource: `${baseUrl}/x402/partner-feed`,
+        type: 'http',
+        x402Version: 2,
+        lastUpdated: new Date().toISOString(),
+        accepts: [
+          {
+            network,
+            asset,
+            amount: '50000', // $0.05
+            payTo: partnerPayToAddress,
+            scheme: 'exact',
+          },
+        ],
+        extensions: {
+          bazaar: {
+            info: {
+              serviceName: 'Partner Chain Feed',
+              description: 'Partner chain data feed (demo: unapproved payee, expected to BLOCK)',
+              tags: ['chain', 'base-sepolia', 'partner'],
+              input: {
+                type: 'http',
+                method: 'GET',
+              },
+              output: {
+                type: 'json',
+                example: {
+                  network: 'eip155:84532',
+                  blockNumber: 12345678,
                 },
               },
             },

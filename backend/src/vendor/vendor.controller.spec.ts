@@ -11,6 +11,8 @@ import { randomBytes } from 'crypto';
 import { ActionsController } from '../actions/actions.controller';
 import { AgentsService } from '../agents/agents.service';
 import { GuardianDecisionType } from '../domain/guardian-decision.entity';
+import { X402_CONFIG } from '../x402/x402.constants';
+import { loadX402Config } from '../x402/x402.config';
 import { PrivyAuthGuard } from '../auth/guards/privy-auth.guard';
 import { AuthenticatedRequest } from '../auth/interfaces/authenticated-request.interface';
 import { Response } from 'express';
@@ -95,6 +97,7 @@ describe('VendorController (x402 Protocol & Company Bills)', () => {
         { provide: OnChainExecutorService, useValue: mockOnChainExecutor },
         { provide: ActionsController, useValue: mockActionsController },
         { provide: AgentsService, useValue: agentsService },
+        { provide: X402_CONFIG, useFactory: loadX402Config },
       ],
     })
       .overrideGuard(PrivyAuthGuard)
@@ -354,18 +357,30 @@ describe('VendorController (x402 Protocol & Company Bills)', () => {
     });
   });
 
-  describe('Bazaar Discovery & Search', () => {
-    it('should find weather services when searching for "weather APIs"', () => {
+  describe('Bazaar Discovery & Search (x402 v2 catalog)', () => {
+    it('should find the weather oracle when searching for "weather APIs"', () => {
       const results = vendorService.searchBazaar('weather APIs', 'http');
       expect(results.length).toBeGreaterThanOrEqual(1);
-      expect(results[0].extensions.bazaar.info.serviceName).toContain('AccuWeather');
-      expect(results[0].resource).toContain('/vendor/weather');
+      expect(results[0].extensions.bazaar.info.serviceName).toContain('Open-Meteo');
+      expect(results[0].resource).toContain('/x402/weather');
     });
 
     it('should filter by query tokens case-insensitively', () => {
-      const results = vendorService.searchBazaar('GPU compute');
+      const results = vendorService.searchBazaar('BASE SEPOLIA chain');
       expect(results.length).toBeGreaterThanOrEqual(1);
-      expect(results.some((r) => r.extensions.bazaar.info.tags.includes('gpu'))).toBe(true);
+      expect(results.some((r) => r.extensions.bazaar.info.tags.includes('base-sepolia'))).toBe(
+        true,
+      );
+    });
+
+    it('should list only the three x402 v2 resources, not the legacy vendor catalog', () => {
+      const catalog = vendorService.getBazaarCatalog();
+      expect(catalog).toHaveLength(3);
+      expect(catalog.map((r) => r.resource)).toEqual([
+        expect.stringContaining('/x402/weather'),
+        expect.stringContaining('/x402/chain-report'),
+        expect.stringContaining('/x402/partner-feed'),
+      ]);
     });
   });
 
@@ -408,21 +423,22 @@ describe('VendorController (x402 Protocol & Company Bills)', () => {
     });
   });
 
-  describe('Service Invocation (invokeService)', () => {
-    it('should autonomously settle and invoke weather service', async () => {
-      onChainExecutor.verifyTokenTransfer.mockResolvedValue(verifiedTransfer(1_000_000n));
+  describe('Service Invocation (invokeService, legacy Guardian-driven rail)', () => {
+    // The x402 v2 catalog resources (/x402/*) are settled through the real @x402/express
+    // middleware and the X402-002 Guardian-gated payments API, not this legacy path. It still
+    // matches them in the catalog (so PENDING_SETTLEMENT/BLOCKED short-circuit correctly before
+    // any settlement is attempted), but has no settlement handler wired for them yet.
+    it('should 404 when a matched x402 v2 resource has no legacy settlement handler', async () => {
+      onChainExecutor.verifyTokenTransfer.mockResolvedValue(verifiedTransfer(10_000n));
 
-      const result = await controller.invokeService(ownerRequest, {
-        resourceUrl: 'https://chapter2-backend.onrender.com/vendor/weather',
-        method: 'GET',
-        params: { city: 'San Francisco' },
-        agentAddress,
-      });
-
-      expect(result.status).toBe('SUCCESS');
-      expect(result.costUsdc).toBe(1);
-      expect(result.txHash).toBeDefined();
-      expect(result.data?.city).toContain('San Francisco');
+      await expect(
+        controller.invokeService(ownerRequest, {
+          resourceUrl: 'https://chapter2-backend.onrender.com/x402/weather',
+          method: 'GET',
+          params: { city: 'San Francisco' },
+          agentAddress,
+        }),
+      ).rejects.toThrow(NotFoundException);
     });
 
     it('should return PENDING_SETTLEMENT and skip verification when no txHash exists yet', async () => {
@@ -431,7 +447,7 @@ describe('VendorController (x402 Protocol & Company Bills)', () => {
       );
 
       const result = await controller.invokeService(ownerRequest, {
-        resourceUrl: 'https://chapter2-backend.onrender.com/vendor/weather',
+        resourceUrl: 'https://chapter2-backend.onrender.com/x402/weather',
         method: 'GET',
         params: { city: 'San Francisco' },
         agentAddress,
@@ -454,7 +470,7 @@ describe('VendorController (x402 Protocol & Company Bills)', () => {
       });
 
       const result = await controller.invokeService(ownerRequest, {
-        resourceUrl: 'https://chapter2-backend.onrender.com/vendor/compute',
+        resourceUrl: 'https://chapter2-backend.onrender.com/x402/chain-report',
         method: 'GET',
         agentAddress,
       });

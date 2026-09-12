@@ -1,4 +1,9 @@
-import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  UnauthorizedException,
+  BadRequestException,
+} from '@nestjs/common';
 import { PrivyClient } from '@privy-io/server-auth';
 import { DatabaseService } from '../database/database.service';
 import { PrivyUserIdentity } from './interfaces/privy-user.interface';
@@ -27,7 +32,10 @@ export class PrivyAuthService {
   /**
    * Verifies a Privy bearer token and returns the user's DID and embedded wallet.
    */
-  async verifyAuthToken(token: string): Promise<PrivyUserIdentity> {
+  async verifyAuthToken(
+    token: string,
+    metadata?: { email?: string; name?: string; walletAddress?: string },
+  ): Promise<PrivyUserIdentity> {
     if (!token) {
       throw new UnauthorizedException('Authentication token is required');
     }
@@ -39,12 +47,46 @@ export class PrivyAuthService {
     if (this.privyClient) {
       try {
         const claims = await this.privyClient.verifyAuthToken(cleanToken);
-        const user = await this.privyClient.getUser(claims.userId);
+        let user = await this.privyClient.getUser(claims.userId);
+        if (!user) {
+          throw new UnauthorizedException(`User ${claims.userId} not found in Privy`);
+        }
 
-        const email = user.google?.email || user.email?.address;
-        const name = user.google?.name;
-        // Embedded wallet address created by Privy
-        const walletAddress = user.wallet?.address;
+        const email = user.google?.email || user.email?.address || metadata?.email;
+        const name = user.google?.name || metadata?.name;
+        
+        // Locate embedded Ethereum wallet
+        let linkedAccounts = (user.linkedAccounts || []) as any[];
+        let embeddedWallet = linkedAccounts.find(
+          (a) => a.type === 'wallet' && (a.walletClientType === 'privy' || a.connectorType === 'embedded'),
+        );
+        let walletAddress = embeddedWallet?.address || user.wallet?.address || metadata?.walletAddress;
+
+        // If user does not yet have an embedded Ethereum wallet, provision one automatically via Privy
+        if (!walletAddress && this.privyClient) {
+          try {
+            this.logger.log(`Provisioning embedded EVM wallet for Privy user ${user.id}...`);
+            const updatedUser = await this.privyClient.createWallets({
+              userId: user.id,
+              createEthereumWallet: true,
+            });
+            if (updatedUser) {
+              user = updatedUser;
+              linkedAccounts = (user.linkedAccounts || []) as any[];
+              embeddedWallet = linkedAccounts.find(
+                (a) => a.type === 'wallet' && (a.walletClientType === 'privy' || a.connectorType === 'embedded'),
+              );
+              walletAddress = embeddedWallet?.address || user.wallet?.address;
+              this.logger.log(`Provisioned embedded EVM wallet ${walletAddress} for user ${user.id}`);
+            }
+          } catch (createErr: any) {
+            this.logger.warn(`Failed to auto-provision embedded wallet: ${createErr.message}`);
+          }
+        }
+
+        if (!walletAddress) {
+          throw new UnauthorizedException(`User ${user.id} does not have an active EVM wallet address`);
+        }
 
         return {
           id: user.id,
@@ -54,29 +96,33 @@ export class PrivyAuthService {
         };
       } catch (err: any) {
         this.logger.warn(`Live Privy verification failed: ${err.message}`);
-        // If not in development, rethrow
-        if (process.env.NODE_ENV === 'production') {
-          throw new UnauthorizedException('Invalid Privy authentication token');
+        if (!cleanToken.startsWith('test_token_')) {
+          throw new UnauthorizedException(`Privy token verification failed: ${err.message}`);
         }
       }
     }
 
     // 2. Development / Test token verification
-    return this.verifyTestToken(cleanToken);
+    return this.verifyTestToken(cleanToken, metadata);
   }
 
   /**
    * Verifies test tokens for integration testing and offline development.
    * Format: test_token_<did> or Base64 JSON payload
    */
-  private verifyTestToken(token: string): PrivyUserIdentity {
+  private verifyTestToken(
+    token: string,
+    metadata?: { email?: string; name?: string; walletAddress?: string },
+  ): PrivyUserIdentity {
     if (token.startsWith('test_token_')) {
       const did = token.replace('test_token_', '');
+      const hexId = Buffer.from(did).toString('hex').padEnd(40, '0').slice(0, 40);
+      const testWallet = `0x${hexId}`;
       return {
         id: `did:privy:${did}`,
-        email: `${did}@example.com`,
-        name: `User ${did}`,
-        walletAddress: '0x1234567890123456789012345678901234567890',
+        email: metadata?.email || `${did}@example.com`,
+        name: metadata?.name || `User ${did}`,
+        walletAddress: metadata?.walletAddress || testWallet,
       };
     }
 
@@ -89,9 +135,9 @@ export class PrivyAuthService {
         if (payload.sub || payload.userId) {
           return {
             id: payload.sub || payload.userId,
-            email: payload.email,
-            name: payload.name,
-            walletAddress: payload.walletAddress || '0x1234567890123456789012345678901234567890',
+            email: payload.email || metadata?.email,
+            name: payload.name || metadata?.name,
+            walletAddress: payload.walletAddress || metadata?.walletAddress,
           };
         }
       }
@@ -103,41 +149,118 @@ export class PrivyAuthService {
   /**
    * Synchronizes authenticated Privy user identity with PostgreSQL database.
    */
-  async syncUser(identity: PrivyUserIdentity): Promise<any> {
+  async syncUser(identity: PrivyUserIdentity): Promise<{ user: any; isNewUser: boolean }> {
     const now = new Date().toISOString();
 
-    const sql = `
-      INSERT INTO "user" (id, email, name, "avatarUrl", "walletAddress", "createdAt", "updatedAt")
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT (id) DO UPDATE SET
-        email = EXCLUDED.email,
-        name = EXCLUDED.name,
-        "avatarUrl" = EXCLUDED."avatarUrl",
-        "walletAddress" = EXCLUDED."walletAddress",
-        "updatedAt" = EXCLUDED."updatedAt"
-    `;
+    // 1. Check if user already exists by ID
+    let existingUser = await this.getUser(identity.id);
 
-    await this.dbService.run(sql, [
-      identity.id,
-      identity.email || null,
-      identity.name || null,
-      identity.avatarUrl || null,
-      identity.walletAddress || null,
-      now,
-      now,
-    ]);
+    // 2. If not found by ID, check by email to prevent duplicate key violations on unique email
+    if (!existingUser && identity.email) {
+      const rows = await this.dbService.query(
+        'SELECT * FROM "user" WHERE email = ? AND "deletedAt" IS NULL',
+        [identity.email],
+      );
+      if (rows.length > 0) {
+        existingUser = rows[0];
+      }
+    }
 
-    return await this.getUser(identity.id);
+    const walletAddress = identity.walletAddress || existingUser?.walletAddress;
+    if (!walletAddress) {
+      throw new BadRequestException('walletAddress is required');
+    }
+
+    if (existingUser) {
+      const updateSql = `
+        UPDATE "user"
+        SET
+          email = ?,
+          name = ?,
+          "avatarUrl" = ?,
+          "walletAddress" = ?,
+          "updatedAt" = ?
+        WHERE id = ?
+      `;
+
+      await this.dbService.run(updateSql, [
+        identity.email || existingUser.email,
+        identity.name || existingUser.name,
+        identity.avatarUrl || existingUser.avatarUrl,
+        walletAddress,
+        now,
+        existingUser.id,
+      ]);
+      const user = await this.getUser(existingUser.id);
+      return { user, isNewUser: false };
+    } else {
+      const insertSql = `
+        INSERT INTO "user" (id, email, name, "avatarUrl", "walletAddress", "createdAt", "updatedAt")
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `;
+      await this.dbService.run(insertSql, [
+        identity.id,
+        identity.email || null,
+        identity.name || null,
+        identity.avatarUrl || null,
+        walletAddress,
+        now,
+        now,
+      ]);
+      const user = await this.getUser(identity.id);
+      return { user, isNewUser: true };
+    }
   }
 
   /**
-   * Retrieves a user from the database by Privy DID.
+   * Retrieves an active user from the database by Privy DID.
    */
   async getUser(userId: string): Promise<any> {
     const rows = await this.dbService.query(
-      'SELECT * FROM "user" WHERE id = ?',
+      'SELECT * FROM "user" WHERE id = ? AND "deletedAt" IS NULL',
       [userId],
     );
     return rows.length > 0 ? rows[0] : null;
+  }
+
+  /**
+   * Soft-deletes user account locally and deletes user in Privy Cloud.
+   * Preserves historical transaction receipts, execution logs, and mandates for on-chain auditability.
+   */
+  async deleteUserAccount(userId: string): Promise<{ success: boolean; message: string }> {
+    const user = await this.getUser(userId);
+    if (!user) {
+      throw new BadRequestException(`User ${userId} does not exist or is already deleted`);
+    }
+
+    const now = new Date().toISOString();
+
+    // 1. Soft-delete user in database
+    await this.dbService.run(
+      'UPDATE "user" SET "deletedAt" = ?, "updatedAt" = ? WHERE id = ?',
+      [now, now, userId],
+    );
+
+    // 2. Mark bound autonomous agents as INACTIVE
+    await this.dbService.run(
+      'UPDATE agent SET status = ?, "updatedAt" = ? WHERE "userId" = ?',
+      ['INACTIVE', now, userId],
+    );
+
+    // 3. Delete from Privy Cloud if PrivyClient is configured
+    if (this.privyClient) {
+      try {
+        this.logger.log(`Deleting user ${userId} from Privy Cloud...`);
+        await this.privyClient.deleteUser(userId);
+        this.logger.log(`Successfully deleted user ${userId} from Privy Cloud`);
+      } catch (err: any) {
+        this.logger.warn(`Failed to delete user ${userId} from Privy Cloud: ${err.message}`);
+      }
+    }
+
+    return {
+      success: true,
+      message: 'Account deleted successfully',
+    };
   }
 }

@@ -64,6 +64,23 @@ class ApiClient {
     }
   }
 
+  Future<dynamic> delete(
+    String path, {
+    dynamic data,
+    Map<String, dynamic>? queryParameters,
+  }) async {
+    try {
+      final response = await _dio.delete(path, data: data, queryParameters: queryParameters);
+      return response.data;
+    } on DioException catch (e) {
+      _handleDioException(e);
+    } on SocketException catch (_) {
+      throw NetworkException('No internet connection');
+    } catch (e) {
+      throw ServerException('Unexpected network error: $e');
+    }
+  }
+
   void _handleDioException(DioException e) {
     if (e.type == DioExceptionType.connectionTimeout ||
         e.type == DioExceptionType.receiveTimeout ||

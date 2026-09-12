@@ -38,7 +38,7 @@ export class AgentsController {
   @Get()
   async getMyAgents(@Req() req: any) {
     const userId = req.user.id;
-    const agents = await this.agentsService.getAgentsForUser(userId);
+    const agents = await this.agentsService.ensureDefaultAgentForUser(userId);
     return {
       success: true,
       agents,

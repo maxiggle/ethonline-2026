@@ -7,7 +7,7 @@ import 'package:chapter2/features/auth/services/auth_service.dart';
 import 'package:chapter2/core/network/api_client.dart';
 
 class MockAuthService extends AuthService {
-  MockAuthService() : super(apiClient: ApiClient(baseUrl: 'http://localhost:3000'));
+  MockAuthService() : super(apiClient: ApiClient(baseUrl: 'http://localhost:3001'));
 
   bool shouldThrow = false;
 
@@ -33,7 +33,13 @@ class MockAuthService extends AuthService {
   ];
 
   @override
-  Future<UserIdentity> loginWithPrivy(String authToken) async {
+  Future<UserIdentity> loginWithGoogle() async {
+    if (shouldThrow) throw Exception('Privy token verification failed');
+    return mockUser;
+  }
+
+  @override
+  Future<UserIdentity> loginWithPrivy(String authToken, {String? email, String? name, String? walletAddress}) async {
     if (shouldThrow) throw Exception('Privy token verification failed');
     return mockUser;
   }
@@ -45,7 +51,13 @@ class MockAuthService extends AuthService {
   }
 
   @override
-  void logout() {}
+  Future<UserIdentity?> checkSession() async {
+    if (shouldThrow) throw Exception('Session check error');
+    return mockUser;
+  }
+
+  @override
+  Future<void> logout() async {}
 }
 
 void main() {
@@ -92,10 +104,22 @@ void main() {
       await cubit.loginWithGoogle();
       expect(cubit.state.isAuthenticated, isTrue);
 
-      cubit.logout();
+      await cubit.logout();
       expect(cubit.state.status, AuthStatus.unauthenticated);
       expect(cubit.state.isAuthenticated, isFalse);
       expect(cubit.state.user, isNull);
+    });
+
+    test('checkSession with valid session restores authenticated user and agents', () async {
+      final mockService = MockAuthService();
+      final cubit = AuthCubit(authService: mockService);
+
+      await cubit.checkSession();
+
+      expect(cubit.state.status, AuthStatus.authenticated);
+      expect(cubit.state.isAuthenticated, isTrue);
+      expect(cubit.state.user?.email, 'user@gmail.com');
+      expect(cubit.state.agents.length, 1);
     });
   });
 }

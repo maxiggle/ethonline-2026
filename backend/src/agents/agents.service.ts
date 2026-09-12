@@ -1,5 +1,6 @@
-import { Injectable, Logger, BadRequestException, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException, NotFoundException, Optional } from '@nestjs/common';
 import { DatabaseService } from '../database/database.service';
+import { OnChainExecutorService } from '../blockchain/on-chain-executor.service';
 import { BindAgentDto } from './dto/bind-agent.dto';
 import { AgentEntity } from './interfaces/agent.interface';
 import { getAddress } from 'ethers';
@@ -8,7 +9,10 @@ import { getAddress } from 'ethers';
 export class AgentsService {
   private readonly logger = new Logger(AgentsService.name);
 
-  constructor(private readonly dbService: DatabaseService) {}
+  constructor(
+    private readonly dbService: DatabaseService,
+    @Optional() private readonly onChainExecutor?: OnChainExecutorService,
+  ) {}
 
   /**
    * Binds an autonomous AI agent to an authenticated user's identity.
@@ -45,6 +49,26 @@ export class AgentsService {
       now,
     ]);
 
+    // Update active mandate in database to recognize this autonomous agent
+    try {
+      await this.dbService.run(
+        'UPDATE treasury_mandates SET autonomous_agent = ?, updated_at = ? WHERE safe_address = ?',
+        [agentAddress, now, safeAddress],
+      );
+    } catch (err: any) {
+      this.logger.debug(`Could not update mandate autonomous_agent: ${err.message}`);
+    }
+
+    // Synchronize with live on-chain Chapter2Guard contract if executor is configured
+    if (this.onChainExecutor) {
+      try {
+        await this.onChainExecutor.setAutonomousAgent(agentAddress);
+        this.logger.log(`On-chain Chapter2Guard updated with autonomous agent: ${agentAddress}`);
+      } catch (onChainErr: any) {
+        this.logger.warn(`On-chain agent registration warning: ${onChainErr.message}`);
+      }
+    }
+
     const created = await this.getAgentById(id);
     if (!created) {
       throw new Error('Failed to retrieve newly created agent');
@@ -63,6 +87,48 @@ export class AgentsService {
       [userId],
     );
     return rows;
+  }
+
+  /**
+   * Ensures the user has at least one active autonomous agent bound to their identity.
+   * Uses the user's real provisioned Privy walletAddress with strict zero-fallback policy.
+   */
+  async ensureDefaultAgentForUser(userId: string): Promise<AgentEntity[]> {
+    const existing = await this.getAgentsForUser(userId);
+    if (existing.length > 0) {
+      return existing;
+    }
+
+    // Query authenticated user record to obtain their real Privy EVM wallet
+    const userRows = await this.dbService.query<any>(
+      'SELECT * FROM "user" WHERE id = ?',
+      [userId],
+    );
+
+    const walletAddress = userRows.length ? (userRows[0].walletAddress || userRows[0].wallet_address) : null;
+    if (!walletAddress) {
+      this.logger.log(`User ${userId} does not have a provisioned walletAddress yet; skipping agent auto-binding`);
+      return [];
+    }
+
+    const safeAddress = process.env.SAFE_ADDRESS || '0x4f712dd78Cb1a504C69CB4f68B82Fddb6b3b1df6';
+    const guardAddress = process.env.GUARD_ADDRESS || '0x9b6023D1B6D3b076C8d999Ba406AE486750ce7d3';
+    const agentAddress = walletAddress;
+
+    try {
+      const created = await this.bindAgent(userId, {
+        agentAddress,
+        name: 'Autonomous Treasury Agent',
+        purpose: 'Supervised treasury execution and automated operational disbursements',
+        safeAddress,
+        guardAddress,
+        chainId: process.env.CHAIN_ID ? Number(process.env.CHAIN_ID) : 84532,
+      });
+      return [created];
+    } catch (err: any) {
+      this.logger.warn(`Failed to auto-bind default agent for user ${userId}: ${err.message}`);
+      return [];
+    }
   }
 
   /**

@@ -2,6 +2,7 @@ import {
   Controller,
   Post,
   Get,
+  Delete,
   Body,
   UseGuards,
   Req,
@@ -23,13 +24,18 @@ export class AuthController {
   @Post('login')
   @HttpCode(HttpStatus.OK)
   async login(@Body() dto: LoginDto) {
-    const identity = await this.authService.verifyAuthToken(dto.authToken);
-    const syncedUser = await this.authService.syncUser(identity);
+    const identity = await this.authService.verifyAuthToken(dto.authToken, {
+      email: dto.email,
+      name: dto.name,
+      walletAddress: dto.walletAddress,
+    });
+    const { user, isNewUser } = await this.authService.syncUser(identity);
 
     return {
       success: true,
       message: 'Authenticated successfully',
-      user: syncedUser || identity,
+      user: user || identity,
+      isNewUser,
     };
   }
 
@@ -44,5 +50,15 @@ export class AuthController {
       success: true,
       user: user || req.user,
     };
+  }
+
+  /**
+   * Protected endpoint soft-deleting user account and removing user from Privy Cloud.
+   * Preserves historical transaction receipts, audit logs, and on-chain records.
+   */
+  @Delete('account')
+  @UseGuards(PrivyAuthGuard)
+  async deleteAccount(@Req() req: any) {
+    return await this.authService.deleteUserAccount(req.user.id);
   }
 }

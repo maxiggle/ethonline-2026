@@ -9,11 +9,11 @@ Chapter 2 is an institutional-grade mobile command center and on-chain governanc
 
 ## The Hierarchy of Authority
 
-1. **Identity (World / AgentKit)**: *Who is behind the agent?* Authenticates the human principal behind the agent.
-2. **Proposer (AI Treasury Agent)**: *What should we do?* Proposes routine operations; holds zero execution authority.
+1. **Identity & Key Lifecycle (Privy & World ID)**: *Who is behind the agent?* Authenticates the human principal, provisions a unique secure-enclave embedded EVM wallet as the Autonomous Agent, and verifies personhood with World ID.
+2. **Proposer (Autonomous Treasury Agent)**: *What should we do?* Executes micro-disbursements autonomously within on-chain spending caps enforced by `Chapter2Guard`; holds zero authority outside pre-approved limits.
 3. **Supervision (AI Guardian)**: *Should we allow it?* Two-layer evaluation (deterministic hard floor + AI contextual anomaly analysis).
 4. **Human Review (Mobile Command Center)**: *Do I approve this?* Native hardware biometrics (Secure Enclave / StrongBox Keystore) gating approvals.
-5. **Final Authority (Ledger)**: *Physical authorization.* Headless Key Ring for secret protection; EIP-712 clear-signing for high-risk execution.
+5. **Final Authority (Ledger)**: *Physical authorization.* Headless Key Ring for secret protection; EIP-712 clear-signing on device screens for high-risk executions and policy changes.
 
 ---
 

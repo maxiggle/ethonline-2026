@@ -1,29 +1,34 @@
 import 'package:flutter/material.dart';
+import 'app_colors.dart';
+
+export 'app_colors.dart';
+export 'app_text_styles.dart';
 
 class Chapter2Theme {
-  static const Color background = Color(0xFF0D1117);
-  static const Color surface = Color(0xFF161B22);
-  static const Color surfaceElevated = Color(0xFF21262D);
-  static const Color border = Color(0xFF30363D);
+  // Legacy mappings for backward compatibility
+  static const Color background = AppColors.screenBackground;
+  static const Color surface = AppColors.cardSurfacePure;
+  static const Color surfaceElevated = AppColors.cardSurface;
+  static const Color border = AppColors.cardBorder;
 
-  static const Color primaryCyan = Color(0xFF58A6FF);
-  static const Color neonTeal = Color(0xFF39D353);
-  static const Color warningAmber = Color(0xFFD29922);
-  static const Color alertRed = Color(0xFFF85149);
-  static const Color textMuted = Color(0xFF8B949E);
+  static const Color primaryCyan = AppColors.brandPrimary;
+  static const Color neonTeal = AppColors.allow;
+  static const Color warningAmber = AppColors.escalate;
+  static const Color alertRed = AppColors.block;
+  static const Color textMuted = AppColors.textMuted;
 
   static ThemeData get darkTheme {
     return ThemeData(
       brightness: Brightness.dark,
-      scaffoldBackgroundColor: background,
+      scaffoldBackgroundColor: AppColors.screenBackground,
       colorScheme: const ColorScheme.dark(
-        surface: surface,
-        primary: primaryCyan,
-        secondary: neonTeal,
-        error: alertRed,
+        surface: AppColors.cardSurfacePure,
+        primary: AppColors.brandPrimary,
+        secondary: AppColors.allow,
+        error: AppColors.block,
       ),
       appBarTheme: const AppBarTheme(
-        backgroundColor: background,
+        backgroundColor: AppColors.screenBackground,
         elevation: 0,
         centerTitle: false,
         titleTextStyle: TextStyle(
@@ -34,33 +39,11 @@ class Chapter2Theme {
         ),
       ),
       cardTheme: CardThemeData(
-        color: surface,
+        color: AppColors.cardSurfacePure,
         elevation: 0,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-          side: const BorderSide(color: border),
-        ),
-      ),
-      textTheme: const TextTheme(
-        headlineMedium: TextStyle(
-          fontSize: 22,
-          fontWeight: FontWeight.w700,
-          letterSpacing: -0.5,
-          color: Colors.white,
-        ),
-        titleMedium: TextStyle(
-          fontSize: 16,
-          fontWeight: FontWeight.w600,
-          color: Colors.white,
-        ),
-        bodyMedium: TextStyle(
-          fontSize: 14,
-          color: textMuted,
-        ),
-        labelSmall: TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w600,
-          letterSpacing: 0.5,
+          borderRadius: BorderRadius.circular(24),
+          side: const BorderSide(color: AppColors.cardBorder),
         ),
       ),
     );

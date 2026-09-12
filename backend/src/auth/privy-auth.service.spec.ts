@@ -71,4 +71,58 @@ describe('PrivyAuthService', () => {
       expect(retrieved.walletAddress).toBe(identity.walletAddress);
     });
   });
+
+  describe('deleteUserAccount', () => {
+    it('should soft-delete user in database and mark bound agents inactive', async () => {
+      const identity = {
+        id: 'did:privy:del_user_1',
+        email: 'del1@example.com',
+        name: 'Del User',
+        walletAddress: '0x2222222222222222222222222222222222222222',
+      };
+
+      await service.syncUser(identity);
+      expect(await service.getUser(identity.id)).toBeDefined();
+
+      // Create an agent bound to this user
+      const now = new Date().toISOString();
+      await dbService.run(
+        'INSERT INTO agent (id, "userId", "agentAddress", name, purpose, "safeAddress", "guardAddress", "chainId", status, "createdAt", "updatedAt") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        [
+          'agent_del_1',
+          identity.id,
+          '0x2222222222222222222222222222222222222222',
+          'Autonomous Agent',
+          'Treasury operations',
+          '0x4f712dd78cb1a504c69cb4f68b82fddb6b3b1df6',
+          '0x9b6023d1b6d3b076c8d999ba406ae486750ce7d3',
+          84532,
+          'ACTIVE',
+          now,
+          now,
+        ],
+      );
+
+      const res = await service.deleteUserAccount(identity.id);
+      expect(res.success).toBe(true);
+
+      // Verify user is no longer retrieved via active getUser
+      const userAfter = await service.getUser(identity.id);
+      expect(userAfter).toBeNull();
+
+      // Verify agent status updated to INACTIVE
+      const agents = await dbService.query(
+        'SELECT * FROM agent WHERE "userId" = ?',
+        [identity.id],
+      );
+      expect(agents.length).toBe(1);
+      expect(agents[0].status).toBe('INACTIVE');
+    });
+
+    it('should throw BadRequestException when deleting non-existent or already deleted user', async () => {
+      await expect(
+        service.deleteUserAccount('did:privy:non_existent_user'),
+      ).rejects.toThrow();
+    });
+  });
 });

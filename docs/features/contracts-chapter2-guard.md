@@ -68,3 +68,8 @@ AI Treasury Agent / Relayer
    - Once a calendar day transitions, the spending ceiling automatically resets to the configured allowance without requiring manual administrative calls.
 4. **Owner Direct Bypass**:
    - The human owner can interact directly through the Safe to manage emergency situations or treasury allocations without being constrained by the autonomous agent caps.
+5. **Dynamic Autonomous Agent Registration & Hardware Separation**:
+   - The contract supports `setAutonomousAgent(address _agent) external onlyOwner`.
+   - Each registered user's **Privy Embedded EVM Wallet** (`user.walletAddress`) is bound dynamically as the on-chain `autonomousAgent`.
+   - Routine disbursements operate autonomously under the user's Privy key within pre-configured mandate limits ($100/tx, $500/day).
+   - High-value disbursements and limit overrides strictly require typed EIP-712 clear-signing from the user's **Ledger hardware wallet** (`humanSigner`), ensuring hardware-enforced cold governance.

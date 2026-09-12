@@ -9,33 +9,65 @@ class AuthCubit extends Cubit<AuthState> {
 
   final AuthService _authService;
 
-  /// Authenticates using a verified Privy token.
+  Future<void> loginWithGoogle() async {
+    emit(state.copyWith(status: AuthStatus.loading));
+    try {
+      final user = await _authService.loginWithGoogle();
+      final agents = await _authService.getAgents();
+      emit(
+        state.copyWith(
+          status: AuthStatus.authenticated,
+          user: user,
+          agents: agents,
+        ),
+      );
+    } catch (e) {
+      emit(
+        state.copyWith(status: AuthStatus.error, errorMessage: e.toString()),
+      );
+    }
+  }
+
   Future<void> loginWithPrivyToken(String token) async {
     emit(state.copyWith(status: AuthStatus.loading));
     try {
       final user = await _authService.loginWithPrivy(token);
       final agents = await _authService.getAgents();
-      emit(state.copyWith(
-        status: AuthStatus.authenticated,
-        user: user,
-        agents: agents,
-      ));
+      emit(
+        state.copyWith(
+          status: AuthStatus.authenticated,
+          user: user,
+          agents: agents,
+        ),
+      );
     } catch (e) {
-      emit(state.copyWith(
-        status: AuthStatus.error,
-        errorMessage: e.toString(),
-      ));
+      emit(
+        state.copyWith(status: AuthStatus.error, errorMessage: e.toString()),
+      );
     }
   }
 
-  /// One-tap Google Sign-In via Privy.
-  Future<void> loginWithGoogle() async {
-    // In consumer deployment, invokes Privy Mobile SDK / OAuth flow.
-    // In dev / test harness, authenticates with verified test DID.
-    await loginWithPrivyToken('test_token_google_user');
+  Future<void> checkSession() async {
+    emit(state.copyWith(status: AuthStatus.loading));
+    try {
+      final user = await _authService.checkSession();
+      if (user != null) {
+        final agents = await _authService.getAgents();
+        emit(
+          state.copyWith(
+            status: AuthStatus.authenticated,
+            user: user,
+            agents: agents,
+          ),
+        );
+      } else {
+        emit(const AuthState(status: AuthStatus.unauthenticated));
+      }
+    } catch (_) {
+      emit(const AuthState(status: AuthStatus.unauthenticated));
+    }
   }
 
-  /// Refreshes the list of autonomous agents bound to this user.
   Future<void> refreshAgents() async {
     if (!state.isAuthenticated) return;
     try {
@@ -44,9 +76,21 @@ class AuthCubit extends Cubit<AuthState> {
     } catch (_) {}
   }
 
-  /// Logs out the user and clears authorization state.
-  void logout() {
-    _authService.logout();
+  Future<void> logout() async {
+    await _authService.logout();
     emit(const AuthState(status: AuthStatus.unauthenticated));
+  }
+
+  Future<void> deleteAccount() async {
+    emit(state.copyWith(status: AuthStatus.loading));
+    try {
+      await _authService.deleteAccount();
+      emit(const AuthState(status: AuthStatus.unauthenticated));
+    } catch (e) {
+      emit(
+        state.copyWith(status: AuthStatus.error, errorMessage: e.toString()),
+      );
+      rethrow;
+    }
   }
 }

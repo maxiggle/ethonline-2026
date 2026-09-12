@@ -4,7 +4,7 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 
 class Chapter2SocketService {
   Chapter2SocketService({String? gatewayUrl})
-      : _gatewayUrl = gatewayUrl ?? 'ws://localhost:3000/ws';
+      : _gatewayUrl = gatewayUrl ?? 'ws://localhost:3001';
 
   final String _gatewayUrl;
   WebSocketChannel? _channel;

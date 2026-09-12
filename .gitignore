@@ -59,3 +59,7 @@ Packages/
 
 # Gradle / JVM
 .gradle/
+
+# Local Editor & Non-project dirs
+.vscode/
+ai_mentor/

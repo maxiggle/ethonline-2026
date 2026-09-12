@@ -145,6 +145,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
         name VARCHAR(128),
         "avatarUrl" TEXT,
         "walletAddress" VARCHAR(64),
+        "deletedAt" TIMESTAMPTZ,
         "createdAt" TIMESTAMPTZ NOT NULL,
         "updatedAt" TIMESTAMPTZ NOT NULL
       );
@@ -177,6 +178,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
           name: row.name,
           avatarUrl: row.avatarUrl || row.avatar_url,
           walletAddress: row.walletAddress || row.wallet_address,
+          deletedAt: row.deletedAt || row.deleted_at ? new Date(row.deletedAt || row.deleted_at).toISOString() : null,
           createdAt: new Date(row.createdAt || row.created_at).toISOString(),
           updatedAt: new Date(row.updatedAt || row.updated_at).toISOString(),
         });
@@ -260,6 +262,12 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
 
     try {
       const data = JSON.parse(fs.readFileSync(this.filePath, 'utf-8'));
+      if (data.users) {
+        this.state.users = new Map(Object.entries(data.users));
+      }
+      if (data.agents) {
+        this.state.agents = new Map(Object.entries(data.agents));
+      }
       if (data.treasuryActions) {
         this.state.treasuryActions = new Map(Object.entries(data.treasuryActions));
       }
@@ -288,6 +296,8 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
         fs.mkdirSync(dir, { recursive: true });
       }
       const data = {
+        users: Object.fromEntries(this.state.users),
+        agents: Object.fromEntries(this.state.agents),
         treasuryActions: Object.fromEntries(this.state.treasuryActions),
         treasuryMandates: Object.fromEntries(this.state.treasuryMandates),
         dailySpentLedger: Object.fromEntries(this.state.dailySpentLedger),
@@ -350,6 +360,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
   // Synchronous execution against fast in-memory store
   public querySync<T = any>(sql: string, params: any[] = []): T[] {
     const s = sql.trim().toUpperCase();
+    const cleanS = s.replace(/["`]/g, '');
 
     if (s.includes('FROM TREASURY_ACTIONS')) {
       if (s.includes('WHERE ID =')) {
@@ -401,12 +412,25 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     }
 
     if (s.includes('FROM "USER"') || s.includes('FROM USER ') || s.includes('FROM USERS')) {
+      const activeFilter = (u: any) => !(cleanS.includes('DELETEDAT IS NULL') && u.deletedAt);
       if (s.includes('WHERE ID =')) {
         const id = params[0];
         const item = this.state.users.get(id);
-        return item ? ([item] as unknown as T[]) : [];
+        if (item && activeFilter(item)) {
+          return [item] as unknown as T[];
+        }
+        return [];
       }
-      return Array.from(this.state.users.values()) as unknown as T[];
+      if (s.includes('WHERE EMAIL =')) {
+        const email = String(params[0]).toLowerCase();
+        for (const u of this.state.users.values()) {
+          if (u.email?.toLowerCase() === email && activeFilter(u)) {
+            return [u] as unknown as T[];
+          }
+        }
+        return [];
+      }
+      return Array.from(this.state.users.values()).filter(activeFilter) as unknown as T[];
     }
 
     if (s.includes('FROM AGENT') || s.includes('FROM "AGENT"') || s.includes('FROM AGENTS')) {
@@ -546,6 +570,32 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     }
 
     // 5. User Identity
+    if (s.startsWith('UPDATE "USER"') || s.startsWith('UPDATE "USERS"') || s.startsWith('UPDATE USER ')) {
+      if (s.includes('DELETEDAT')) {
+        const [deletedAt, updatedAt, id] = params;
+        const existing = this.state.users.get(id);
+        if (existing) {
+          (existing as any).deletedAt = deletedAt ? String(deletedAt) : null;
+          existing.updatedAt = String(updatedAt);
+        }
+        this.saveToFile();
+        this.asyncWriteToPostgres(sql, params);
+        return { changes: 1 };
+      }
+      const [email, name, avatarUrl, walletAddress, updatedAt, id] = params;
+      const existing = this.state.users.get(id);
+      if (existing) {
+        if (email !== undefined) existing.email = email;
+        if (name !== undefined) existing.name = name;
+        if (avatarUrl !== undefined) existing.avatarUrl = avatarUrl;
+        if (walletAddress !== undefined) existing.walletAddress = walletAddress;
+        existing.updatedAt = String(updatedAt);
+      }
+      this.saveToFile();
+      this.asyncWriteToPostgres(sql, params);
+      return { changes: 1 };
+    }
+
     if (s.includes('INTO "USER"') || s.includes('INTO USER ') || s.includes('INTO USERS')) {
       const [id, email, name, avatarUrl, walletAddress, createdAt, updatedAt] = params;
       const user = {
@@ -583,6 +633,21 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
       this.saveToFile();
       this.asyncWriteToPostgres(sql, params);
       return { changes: 1 };
+    }
+
+    if (s.startsWith('UPDATE AGENT') || s.startsWith('UPDATE "AGENT"')) {
+      if (s.includes('STATUS =')) {
+        const [status, updatedAt, userId] = params;
+        for (const agent of this.state.agents.values()) {
+          if (agent.userId === userId) {
+            agent.status = status;
+            agent.updatedAt = String(updatedAt);
+          }
+        }
+        this.saveToFile();
+        this.asyncWriteToPostgres(sql, params);
+        return { changes: 1 };
+      }
     }
 
     return { changes: 0 };

@@ -41,3 +41,25 @@ xcuserdata
 .env
 .env.*
 !.env.example
+
+# Databases
+*.sqlite
+*.sqlite-journal
+*.sqlite-wal
+*.sqlite-shm
+data/
+backend/data/
+
+# Swift / SPM
+.build/
+Packages/
+*.xcodeproj
+*.xcworkspace
+.swiftpm/
+
+# Gradle / JVM
+.gradle/
+
+# Local Editor & Non-project dirs
+.vscode/
+ai_mentor/

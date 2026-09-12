@@ -1,0 +1,64 @@
+import {
+  Controller,
+  Post,
+  Get,
+  Delete,
+  Body,
+  UseGuards,
+  Req,
+  HttpCode,
+  HttpStatus,
+} from '@nestjs/common';
+import { PrivyAuthService } from './privy-auth.service';
+import { PrivyAuthGuard } from './guards/privy-auth.guard';
+import { LoginDto } from './dto/login.dto';
+
+@Controller('auth')
+export class AuthController {
+  constructor(private readonly authService: PrivyAuthService) {}
+
+  /**
+   * Client logs in with Privy auth token received after Google or Email authentication.
+   * Backend verifies token, captures user profile and embedded wallet address, and syncs to database.
+   */
+  @Post('login')
+  @HttpCode(HttpStatus.OK)
+  async login(@Body() dto: LoginDto) {
+    const identity = await this.authService.verifyAuthToken(dto.authToken, {
+      email: dto.email,
+      name: dto.name,
+      walletAddress: dto.walletAddress,
+    });
+    const { user, isNewUser } = await this.authService.syncUser(identity);
+
+    return {
+      success: true,
+      message: 'Authenticated successfully',
+      user: user || identity,
+      isNewUser,
+    };
+  }
+
+  /**
+   * Protected endpoint returning current authenticated user profile and embedded wallet address.
+   */
+  @Get('me')
+  @UseGuards(PrivyAuthGuard)
+  async getProfile(@Req() req: any) {
+    const user = await this.authService.getUser(req.user.id);
+    return {
+      success: true,
+      user: user || req.user,
+    };
+  }
+
+  /**
+   * Protected endpoint soft-deleting user account and removing user from Privy Cloud.
+   * Preserves historical transaction receipts, audit logs, and on-chain records.
+   */
+  @Delete('account')
+  @UseGuards(PrivyAuthGuard)
+  async deleteAccount(@Req() req: any) {
+    return await this.authService.deleteUserAccount(req.user.id);
+  }
+}

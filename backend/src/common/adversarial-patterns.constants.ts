@@ -1,0 +1,60 @@
+export const LEET_SUBSTITUTION_MAP: Record<string, string> = {
+  '0': 'o',
+  '1': 'i',
+  '!': 'i',
+  '|': 'l',
+  '3': 'e',
+  '4': 'a',
+  '@': 'a',
+  '5': 's',
+  '$': 's',
+  '7': 't',
+  '+': 't',
+  '8': 'b',
+  '9': 'g',
+};
+
+export const SUBVERSION_INTENT_TOKENS: readonly string[] = [
+  'ignore',
+  'disregard',
+  'override',
+  'bypass',
+  'forget',
+  'neglect',
+  'revoke',
+  'cancel',
+  'jailbreak',
+  'dan',
+  'unrestricted',
+  'developer mode',
+];
+
+export const TARGET_CONSTRAINT_TOKENS: readonly string[] = [
+  'instruction',
+  'instructions',
+  'rule',
+  'rules',
+  'guard',
+  'guardrail',
+  'guardrails',
+  'prompt',
+  'system prompt',
+  'mandate',
+  'constraint',
+  'constraints',
+];
+
+export const EXFILTRATION_INTENT_TOKENS: readonly string[] = [
+  'drain',
+  'sweep',
+  'empty',
+  'liquidate',
+  '100%',
+  'all balance',
+  'full balance',
+  'entire balance',
+  'all funds',
+  'all assets',
+  'unlimited allowance',
+  'max allowance',
+];

@@ -1241,24 +1241,27 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                 ),
                 elevation: 0,
               ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(
-                    Icons.rocket_launch_rounded,
-                    size: 20,
-                    color: Colors.white,
-                  ),
-                  const SizedBox(width: 10),
-                  Text(
-                    'Complete Setup & Enter Command Center',
-                    style: AppTextStyles.md(
-                      context,
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(
+                      Icons.rocket_launch_rounded,
+                      size: 20,
                       color: Colors.white,
-                      fontWeight: AppTextStyles.bold,
                     ),
-                  ),
-                ],
+                    const SizedBox(width: 10),
+                    Text(
+                      'Complete Setup & Enter Command Center',
+                      style: AppTextStyles.md(
+                        context,
+                        color: Colors.white,
+                        fontWeight: AppTextStyles.bold,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),

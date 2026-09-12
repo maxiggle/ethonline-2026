@@ -1,4 +1,6 @@
 import 'package:auto_route/auto_route.dart';
+import 'package:chapter2/features/agents/view/add_agent_sheet.dart';
+import 'package:chapter2/features/agents/view/agent_detail_screen.dart';
 import 'package:chapter2/features/auth/cubit/auth_cubit.dart';
 import 'package:chapter2/features/auth/cubit/auth_state.dart';
 import 'package:chapter2/router/app_router.dart';
@@ -108,6 +110,161 @@ class SettingsScreen extends StatelessWidget {
                           ),
                         ),
                       ],
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                // Autonomous AI Agents Section
+                _buildSectionCard(
+                  context,
+                  title: 'Autonomous AI Agents',
+                  icon: Icons.smart_toy_rounded,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              activeAgent?.name ?? 'Autonomous Treasury Agent',
+                              style: AppTextStyles.md(
+                                context,
+                                color: Colors.white,
+                                fontWeight: AppTextStyles.bold,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'Supervised Worker • Gnosis Safe',
+                              style: AppTextStyles.xs(
+                                context,
+                                color: AppColors.textSecondary,
+                              ),
+                            ),
+                          ],
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 3,
+                          ),
+                          decoration: BoxDecoration(
+                            color: AppColors.allowBackground,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: AppColors.allowBorder),
+                          ),
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 6,
+                                height: 6,
+                                decoration: const BoxDecoration(
+                                  color: AppColors.allow,
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                              const SizedBox(width: 5),
+                              Text(
+                                activeAgent?.status ?? 'ACTIVE',
+                                style: AppTextStyles.xs(
+                                  context,
+                                  color: AppColors.allowText,
+                                  fontWeight: AppTextStyles.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const Divider(height: 16, color: AppColors.cardBorder),
+                    _buildInfoRow(
+                      context,
+                      'Agent Address',
+                      activeAgent?.agentAddress ?? wallet,
+                      isMonospace: true,
+                      canCopy: true,
+                    ),
+                    const Divider(height: 16, color: AppColors.cardBorder),
+                    InkWell(
+                      onTap: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => const AgentDetailScreen(),
+                          ),
+                        );
+                      },
+                      borderRadius: BorderRadius.circular(8),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 6.0),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Row(
+                              children: [
+                                const Icon(
+                                  Icons.tune_rounded,
+                                  size: 16,
+                                  color: AppColors.brandPrimary,
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  'Manage Agents & Guard Policies',
+                                  style: AppTextStyles.sm(
+                                    context,
+                                    color: Colors.white,
+                                    fontWeight: AppTextStyles.medium,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            Row(
+                              children: [
+                                Text(
+                                  '${agents.length} Registered',
+                                  style: AppTextStyles.xs(
+                                    context,
+                                    color: AppColors.brandPrimary,
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                                const Icon(
+                                  Icons.arrow_forward_ios_rounded,
+                                  size: 12,
+                                  color: AppColors.brandPrimary,
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const Divider(height: 16, color: AppColors.cardBorder),
+                    InkWell(
+                      onTap: () => AddAgentSheet.show(context),
+                      borderRadius: BorderRadius.circular(8),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 6.0),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.add_circle_outline_rounded,
+                              size: 16,
+                              color: AppColors.allow,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Spawn New Autonomous Agent',
+                              style: AppTextStyles.sm(
+                                context,
+                                color: AppColors.allow,
+                                fontWeight: AppTextStyles.semiBold,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
                   ],
                 ),

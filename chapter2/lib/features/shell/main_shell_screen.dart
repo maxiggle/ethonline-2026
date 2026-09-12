@@ -1,6 +1,6 @@
 import 'package:auto_route/auto_route.dart';
 import 'package:chapter2/features/activity/view/activity_timeline_screen.dart';
-import 'package:chapter2/features/agents/view/agent_detail_screen.dart';
+import 'package:chapter2/features/bills/view/company_bills_screen.dart';
 import 'package:chapter2/features/dashboard/view/dashboard_screen.dart';
 import 'package:chapter2/features/settings/view/settings_screen.dart';
 import 'package:chapter2/router/app_router.dart';
@@ -27,7 +27,7 @@ class _MainShellScreenState extends State<MainShellScreen> {
     final List<Widget> pages = [
       DashboardScreen(onNavigateToTab: _onTabSelected),
       const ActivityTimelineScreen(),
-      const AgentDetailScreen(),
+      const CompanyBillsScreen(),
       SettingsScreen(
         onSignOut: () {
           context.router.replace(LoginRoute());
@@ -56,7 +56,7 @@ class _MainShellScreenState extends State<MainShellScreen> {
               children: [
                 _buildNavItem(0, Icons.space_dashboard_rounded, 'Dashboard'),
                 _buildNavItem(1, Icons.receipt_long_rounded, 'Activity'),
-                _buildNavItem(2, Icons.smart_toy_rounded, 'Agents'),
+                _buildNavItem(2, Icons.request_quote_rounded, 'Bills'),
                 _buildNavItem(3, Icons.settings_rounded, 'Settings'),
               ],
             ),

@@ -10,6 +10,7 @@ import 'package:chapter2/features/auth/services/auth_service.dart';
 import 'package:chapter2/features/dashboard/cubit/dashboard_cubit.dart';
 import 'package:chapter2/features/dashboard/view/dashboard_screen.dart';
 import 'package:chapter2/features/approval/cubit/approval_cubit.dart';
+import 'package:chapter2/features/bills/cubit/bills_cubit.dart';
 import 'package:chapter2/services/api/chapter2_api_service.dart';
 import 'package:chapter2/shared/theme/chapter2_theme.dart';
 
@@ -45,6 +46,7 @@ void main() {
 
     final dashboardCubit = DashboardCubit(apiService: locator<Chapter2ApiService>());
     final approvalCubit = ApprovalCubit(apiService: locator<Chapter2ApiService>());
+    final billsCubit = BillsCubit(apiService: locator<Chapter2ApiService>());
 
     await tester.pumpWidget(
       MultiBlocProvider(
@@ -52,6 +54,7 @@ void main() {
           BlocProvider<AuthCubit>.value(value: authCubit),
           BlocProvider<DashboardCubit>.value(value: dashboardCubit),
           BlocProvider<ApprovalCubit>.value(value: approvalCubit),
+          BlocProvider<BillsCubit>.value(value: billsCubit),
         ],
         child: MaterialApp(
           theme: Chapter2Theme.darkTheme,

@@ -2,6 +2,7 @@ import 'package:chapter2/core/di/locator.dart';
 import 'package:chapter2/features/approval/cubit/approval_cubit.dart';
 import 'package:chapter2/features/auth/cubit/auth_cubit.dart';
 import 'package:chapter2/features/auth/services/auth_service.dart';
+import 'package:chapter2/features/bills/cubit/bills_cubit.dart';
 import 'package:chapter2/features/dashboard/cubit/dashboard_cubit.dart';
 import 'package:chapter2/router/app_router.dart';
 import 'package:chapter2/services/api/chapter2_api_service.dart';
@@ -16,25 +17,39 @@ class Chapter2App extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MultiBlocProvider(
+    return MultiRepositoryProvider(
       providers: [
-        BlocProvider<AuthCubit>(
-          create: (_) => AuthCubit(authService: locator<AuthService>()),
+        RepositoryProvider<Chapter2ApiService>.value(
+          value: locator<Chapter2ApiService>(),
         ),
-        BlocProvider<DashboardCubit>(
-          create: (_) =>
-              DashboardCubit(apiService: locator<Chapter2ApiService>()),
-        ),
-        BlocProvider<ApprovalCubit>(
-          create: (_) =>
-              ApprovalCubit(apiService: locator<Chapter2ApiService>()),
+        RepositoryProvider<AuthService>.value(
+          value: locator<AuthService>(),
         ),
       ],
-      child: MaterialApp.router(
-        title: 'Chapter 2 Guardian',
-        theme: Chapter2Theme.darkTheme,
-        debugShowCheckedModeBanner: false,
-        routerConfig: appRouter.config(),
+      child: MultiBlocProvider(
+        providers: [
+          BlocProvider<AuthCubit>(
+            create: (ctx) => AuthCubit(authService: ctx.read<AuthService>()),
+          ),
+          BlocProvider<DashboardCubit>(
+            create: (ctx) =>
+                DashboardCubit(apiService: ctx.read<Chapter2ApiService>()),
+          ),
+          BlocProvider<ApprovalCubit>(
+            create: (ctx) =>
+                ApprovalCubit(apiService: ctx.read<Chapter2ApiService>()),
+          ),
+          BlocProvider<BillsCubit>(
+            create: (ctx) =>
+                BillsCubit(apiService: ctx.read<Chapter2ApiService>()),
+          ),
+        ],
+        child: MaterialApp.router(
+          title: 'Chapter 2 Guardian',
+          theme: Chapter2Theme.darkTheme,
+          debugShowCheckedModeBanner: false,
+          routerConfig: appRouter.config(),
+        ),
       ),
     );
   }

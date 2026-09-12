@@ -1,5 +1,6 @@
 import 'package:chapter2/features/auth/cubit/auth_cubit.dart';
 import 'package:chapter2/features/auth/cubit/auth_state.dart';
+import 'package:chapter2/features/bills/view/company_bills_screen.dart';
 import 'package:chapter2/features/dashboard/cubit/dashboard_cubit.dart';
 import 'package:chapter2/features/dashboard/cubit/dashboard_state.dart';
 import 'package:chapter2/features/mandate/view/mandate_management_sheet.dart';
@@ -24,6 +25,18 @@ class _AgentDetailScreenState extends State<AgentDetailScreen> {
     return Scaffold(
       backgroundColor: AppColors.screenBackground,
       appBar: AppBar(
+        backgroundColor: AppColors.screenBackground,
+        elevation: 0,
+        leading: Navigator.of(context).canPop()
+            ? IconButton(
+                icon: const Icon(
+                  Icons.arrow_back_ios_new_rounded,
+                  size: 20,
+                  color: Colors.white,
+                ),
+                onPressed: () => Navigator.of(context).pop(),
+              )
+            : null,
         title: Text(
           'Supervised Agents & Mandates',
           style: AppTextStyles.xl(context, color: Colors.white),
@@ -348,7 +361,36 @@ class _AgentDetailScreenState extends State<AgentDetailScreen> {
                               _buildVendorChip(context, 'OpenAI Platform API'),
                             ],
                           ),
-                          const SizedBox(height: 20),
+                          const SizedBox(height: 16),
+                          ElevatedButton(
+                            onPressed: () => CompanyBillsScreen.show(context),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.cardSurface,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 13),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16),
+                                side: const BorderSide(color: AppColors.brandPrimary),
+                              ),
+                              elevation: 0,
+                            ),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const Icon(Icons.receipt_long_rounded, size: 18, color: AppColors.brandPrimary),
+                                const SizedBox(width: 8),
+                                Text(
+                                  'Company Invoices & x402 Paywalls',
+                                  style: AppTextStyles.md(
+                                    context,
+                                    color: Colors.white,
+                                    fontWeight: AppTextStyles.bold,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 10),
                           ElevatedButton(
                             onPressed: () => MandateManagementSheet.show(context),
                             style: ElevatedButton.styleFrom(

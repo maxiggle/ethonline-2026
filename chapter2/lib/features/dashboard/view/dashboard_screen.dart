@@ -9,6 +9,7 @@ import 'package:chapter2/features/auth/cubit/auth_cubit.dart';
 import 'package:chapter2/features/dashboard/cubit/dashboard_cubit.dart';
 import 'package:chapter2/features/dashboard/cubit/dashboard_state.dart';
 import 'package:chapter2/features/dashboard/widgets/spending_sparkline_chart.dart';
+import 'package:chapter2/features/bills/view/company_bills_screen.dart';
 import 'package:chapter2/features/guardian_alert/view/guardian_analysis_sheet.dart';
 import 'package:chapter2/features/mandate/view/mandate_management_sheet.dart';
 import 'package:chapter2/features/settings/view/settings_screen.dart';
@@ -71,7 +72,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 children: [
                   _buildHomeTab(context),
                   const ActivityTimelineScreen(),
-                  const AgentDetailScreen(),
+                  const CompanyBillsScreen(),
                   SettingsScreen(
                     onSignOut: () {
                       context.router.replace(LoginRoute());
@@ -79,7 +80,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ),
                 ],
               ),
-        bottomNavigationBar: isHosted ? null : _buildBottomNavigationBar(context),
+        bottomNavigationBar: isHosted
+            ? null
+            : _buildBottomNavigationBar(context),
       ),
     );
   }
@@ -89,7 +92,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
       decoration: BoxDecoration(
         color: AppColors.screenBackgroundElevated,
         border: Border(
-          top: BorderSide(color: AppColors.actionPillBorder.withValues(alpha: 0.6)),
+          top: BorderSide(
+            color: AppColors.actionPillBorder.withValues(alpha: 0.6),
+          ),
         ),
       ),
       child: SafeArea(
@@ -100,7 +105,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             children: [
               _buildNavItem(0, Icons.space_dashboard_rounded, 'Dashboard'),
               _buildNavItem(1, Icons.receipt_long_rounded, 'Activity'),
-              _buildNavItem(2, Icons.smart_toy_rounded, 'Agents'),
+              _buildNavItem(2, Icons.request_quote_rounded, 'Bills'),
               _buildNavItem(3, Icons.settings_rounded, 'Settings'),
             ],
           ),
@@ -171,11 +176,110 @@ class _DashboardScreenState extends State<DashboardScreen> {
               // Middle Floating Charcoal Action Pill Bar
               _buildMiddleActionPillBar(context),
               const SizedBox(height: 14),
+              // Company Invoices & x402 Bills Quick Banner
+              _buildCompanyBillsBanner(context),
+              const SizedBox(height: 14),
               // Lower Card: Split Agent/Sparkline + Recent Activity
               _buildLowerContentCard(context),
               const SizedBox(height: 16),
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCompanyBillsBanner(BuildContext context) {
+    return InkWell(
+      onTap: () => _switchTab(2),
+      borderRadius: BorderRadius.circular(22),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+        decoration: BoxDecoration(
+          color: AppColors.cardSurfacePure,
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(
+            color: AppColors.brandPrimary.withValues(alpha: 0.35),
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.brandPrimary.withValues(alpha: 0.06),
+              blurRadius: 16,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 42,
+              height: 42,
+              decoration: BoxDecoration(
+                color: AppColors.brandPrimary.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: const Icon(
+                Icons.receipt_long_rounded,
+                color: AppColors.brandPrimary,
+                size: 22,
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text(
+                        'Company Invoices & x402',
+                        style: AppTextStyles.sm(
+                          context,
+                          fontWeight: AppTextStyles.bold,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.allow.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          '3 ACTIVE',
+                          style: AppTextStyles.mono(
+                            context,
+                            fontSize: 9,
+                            color: AppColors.allow,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Google Cloud, AWS & Alchemy • Bound to Safe',
+                    style: AppTextStyles.mono(
+                      context,
+                      fontSize: 10,
+                      color: AppColors.textMuted,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+            const Icon(
+              Icons.arrow_forward_ios_rounded,
+              size: 14,
+              color: Colors.white70,
+            ),
+          ],
         ),
       ),
     );
@@ -188,8 +292,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final walletAddress = user?.walletAddress ?? '';
     final truncatedWallet = walletAddress.isNotEmpty
         ? (walletAddress.length > 12
-            ? '${walletAddress.substring(0, 6)}...${walletAddress.substring(walletAddress.length - 4)}'
-            : walletAddress)
+              ? '${walletAddress.substring(0, 6)}...${walletAddress.substring(walletAddress.length - 4)}'
+              : walletAddress)
         : 'Connecting...';
 
     final totalBalance = metrics?.totalTreasuryBalanceUsdc;
@@ -241,10 +345,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     InkWell(
                       onTap: walletAddress.isNotEmpty
                           ? () {
-                              Clipboard.setData(ClipboardData(text: walletAddress));
+                              Clipboard.setData(
+                                ClipboardData(text: walletAddress),
+                              );
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
-                                  content: Text('Copied Privy EVM: $walletAddress'),
+                                  content: Text(
+                                    'Copied Privy EVM: $walletAddress',
+                                  ),
                                   backgroundColor: AppColors.allow,
                                   behavior: SnackBarBehavior.floating,
                                 ),
@@ -272,7 +380,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           ),
                           if (walletAddress.isNotEmpty) ...[
                             const SizedBox(width: 4),
-                            const Icon(Icons.copy_rounded, size: 11, color: AppColors.textMuted),
+                            const Icon(
+                              Icons.copy_rounded,
+                              size: 11,
+                              color: AppColors.textMuted,
+                            ),
                           ],
                         ],
                       ),
@@ -338,7 +450,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
           const SizedBox(height: 12),
           // Large Treasury Balance Display
           Text(
-            totalBalance != null ? '\$${_formatCurrency(totalBalance)}' : '\$--.--',
+            totalBalance != null
+                ? '\$${_formatCurrency(totalBalance)}'
+                : '\$--.--',
             style: AppTextStyles.display(
               context,
               color: AppColors.textPrimary,
@@ -352,10 +466,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
             children: [
               Text(
                 'Autonomous Spend Today: \$${spentToday.toStringAsFixed(2)}',
-                style: AppTextStyles.sm(context, color: AppColors.textSecondary),
+                style: AppTextStyles.sm(
+                  context,
+                  color: AppColors.textSecondary,
+                ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
                 decoration: BoxDecoration(
                   color: AppColors.allowBackground,
                   borderRadius: BorderRadius.circular(20),
@@ -364,7 +484,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.shield_outlined, size: 12, color: AppColors.allowText),
+                    const Icon(
+                      Icons.shield_outlined,
+                      size: 12,
+                      color: AppColors.allowText,
+                    ),
                     const SizedBox(width: 4),
                     Text(
                       'Daily Cap: \$${dailyCap.toStringAsFixed(0)}',
@@ -441,13 +565,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
               icon: Icons.shield_rounded,
               isCenterPrimary: true,
               onTap: () {
-                final pending = context.read<DashboardCubit>().state.pendingEscalationAction;
+                final pending = context
+                    .read<DashboardCubit>()
+                    .state
+                    .pendingEscalationAction;
                 if (pending != null) {
                   _showBiometricApprovalSheet(context, pending);
                 } else {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
-                      content: Text('No pending escalations require clear-signing right now.'),
+                      content: Text(
+                        'No pending escalations require clear-signing right now.',
+                      ),
                       behavior: SnackBarBehavior.floating,
                     ),
                   );
@@ -494,7 +623,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
             Icon(
               icon,
               size: 16,
-              color: isCenterPrimary ? AppColors.escalate : AppColors.actionPillForeground,
+              color: isCenterPrimary
+                  ? AppColors.escalate
+                  : AppColors.actionPillForeground,
             ),
             const SizedBox(width: 6),
             Text(
@@ -502,7 +633,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
               style: AppTextStyles.sm(
                 context,
                 color: AppColors.actionPillForeground,
-                fontWeight: isCenterPrimary ? AppTextStyles.bold : AppTextStyles.medium,
+                fontWeight: isCenterPrimary
+                    ? AppTextStyles.bold
+                    : AppTextStyles.medium,
               ),
             ),
           ],
@@ -541,7 +674,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
               Expanded(
                 flex: 5,
                 child: InkWell(
-                  onTap: () => _switchTab(2),
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const AgentDetailScreen(),
+                    ),
+                  ),
                   borderRadius: BorderRadius.circular(16),
                   child: Container(
                     padding: const EdgeInsets.all(12),
@@ -651,7 +788,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 onTap: () => _switchTab(1),
                 borderRadius: BorderRadius.circular(8),
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 2,
+                  ),
                   child: Text(
                     'See all',
                     style: AppTextStyles.sm(
@@ -695,7 +835,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ListView.separated(
               shrinkWrap: true,
               physics: const NeverScrollableScrollPhysics(),
-              itemCount: filteredActions.length > 5 ? 5 : filteredActions.length,
+              itemCount: filteredActions.length > 5
+                  ? 5
+                  : filteredActions.length,
               separatorBuilder: (context, index) => const SizedBox(height: 8),
               itemBuilder: (context, index) {
                 final action = filteredActions[index];
@@ -707,7 +849,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildAgentAvatarBubble(BuildContext context, String emoji, bool isOnline) {
+  Widget _buildAgentAvatarBubble(
+    BuildContext context,
+    String emoji,
+    bool isOnline,
+  ) {
     return Stack(
       children: [
         CircleAvatar(
@@ -740,7 +886,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
       child: CircleAvatar(
         radius: 16,
         backgroundColor: AppColors.cardSurfacePure,
-        child: const Icon(Icons.add_rounded, size: 16, color: AppColors.textSecondary),
+        child: const Icon(
+          Icons.add_rounded,
+          size: 16,
+          color: AppColors.textSecondary,
+        ),
       ),
     );
   }
@@ -753,10 +903,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
         decoration: BoxDecoration(
-          color: isSelected ? AppColors.actionPillBackground : AppColors.cardSurface,
+          color: isSelected
+              ? AppColors.actionPillBackground
+              : AppColors.cardSurface,
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: isSelected ? AppColors.actionPillBackground : AppColors.cardBorder,
+            color: isSelected
+                ? AppColors.actionPillBackground
+                : AppColors.cardBorder,
           ),
         ),
         child: Text(
@@ -774,21 +928,30 @@ class _DashboardScreenState extends State<DashboardScreen> {
   List<TreasuryAction> _filterRecentActions(List<TreasuryAction> actions) {
     if (_activityFilter == 'ALL') return actions;
     if (_activityFilter == 'ALLOW') {
-      return actions.where((a) =>
-          a.status == TreasuryActionStatus.executed ||
-          a.status == TreasuryActionStatus.approved).toList();
+      return actions
+          .where(
+            (a) =>
+                a.status == TreasuryActionStatus.executed ||
+                a.status == TreasuryActionStatus.approved,
+          )
+          .toList();
     }
     if (_activityFilter == 'ESCALATE') {
-      return actions.where((a) => a.status == TreasuryActionStatus.pending).toList();
+      return actions
+          .where((a) => a.status == TreasuryActionStatus.pending)
+          .toList();
     }
     if (_activityFilter == 'BLOCK') {
-      return actions.where((a) => a.status == TreasuryActionStatus.rejected).toList();
+      return actions
+          .where((a) => a.status == TreasuryActionStatus.rejected)
+          .toList();
     }
     return actions;
   }
 
   Widget _buildRecentActionRow(BuildContext context, TreasuryAction action) {
-    final isAllow = action.status == TreasuryActionStatus.executed ||
+    final isAllow =
+        action.status == TreasuryActionStatus.executed ||
         action.status == TreasuryActionStatus.approved;
     final isEscalate = action.status == TreasuryActionStatus.pending;
 
@@ -797,13 +960,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
         : (isEscalate ? AppColors.escalate : AppColors.block);
     final badgeBg = isAllow
         ? AppColors.allowBackground
-        : (isEscalate ? AppColors.escalateBackground : AppColors.blockBackground);
+        : (isEscalate
+              ? AppColors.escalateBackground
+              : AppColors.blockBackground);
     final badgeText = isAllow
         ? AppColors.allowText
         : (isEscalate ? AppColors.escalateText : AppColors.blockText);
-    final badgeLabel = isAllow
-        ? 'ALLOW'
-        : (isEscalate ? 'ESCALATE' : 'BLOCK');
+    final badgeLabel = isAllow ? 'ALLOW' : (isEscalate ? 'ESCALATE' : 'BLOCK');
 
     return InkWell(
       onTap: () => GuardianAnalysisSheet.show(context, action),
@@ -827,7 +990,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
               child: Icon(
                 isAllow
                     ? Icons.arrow_outward_rounded
-                    : (isEscalate ? Icons.fingerprint_rounded : Icons.shield_rounded),
+                    : (isEscalate
+                          ? Icons.fingerprint_rounded
+                          : Icons.shield_rounded),
                 size: 18,
                 color: badgeColor,
               ),
@@ -838,7 +1003,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    action.purpose.isNotEmpty ? action.purpose : 'Autonomous Transfer',
+                    action.purpose.isNotEmpty
+                        ? action.purpose
+                        : 'Autonomous Transfer',
                     style: AppTextStyles.sm(
                       context,
                       color: AppColors.textPrimary,
@@ -849,7 +1016,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   const SizedBox(height: 2),
                   Text(
                     '${action.agentAddress.isNotEmpty ? (action.agentAddress.length > 10 ? '${action.agentAddress.substring(0, 6)}...' : action.agentAddress) : "Agent #1"} · ${_formatTime(action.timestamp)}',
-                    style: AppTextStyles.xs(context, color: AppColors.textMuted),
+                    style: AppTextStyles.xs(
+                      context,
+                      color: AppColors.textMuted,
+                    ),
                   ),
                 ],
               ),
@@ -868,11 +1038,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
                 const SizedBox(height: 2),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 2,
+                  ),
                   decoration: BoxDecoration(
                     color: badgeBg,
                     borderRadius: BorderRadius.circular(6),
-                    border: Border.all(color: badgeColor.withValues(alpha: 0.3)),
+                    border: Border.all(
+                      color: badgeColor.withValues(alpha: 0.3),
+                    ),
                   ),
                   child: Text(
                     badgeLabel,
@@ -1034,7 +1209,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           isCourier: true,
                         ),
                         if (action.nonce != null) ...[
-                          const Divider(height: 14, color: AppColors.cardBorder),
+                          const Divider(
+                            height: 14,
+                            color: AppColors.cardBorder,
+                          ),
                           _buildSheetRow(
                             context,
                             'Safe Nonce',
@@ -1124,7 +1302,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 : AppTextStyles.sm(
                     context,
                     color: AppColors.textPrimary,
-                    fontWeight: isBold ? AppTextStyles.bold : AppTextStyles.medium,
+                    fontWeight: isBold
+                        ? AppTextStyles.bold
+                        : AppTextStyles.medium,
                   ),
             overflow: TextOverflow.ellipsis,
           ),

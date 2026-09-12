@@ -16,6 +16,16 @@ class AppConfig {
 
   static const String backendBaseUrl = String.fromEnvironment(
     "BACKEND_BASE_URL",
-    defaultValue: "http://localhost:3001",
+    defaultValue: "https://chapter2-backend.onrender.com",
   );
+
+  static String get websocketUrl {
+    final base = backendBaseUrl;
+    if (base.startsWith("https://")) {
+      return base.replaceFirst("https://", "wss://");
+    } else if (base.startsWith("http://")) {
+      return base.replaceFirst("http://", "ws://");
+    }
+    return "wss://$base";
+  }
 }

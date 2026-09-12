@@ -1,10 +1,11 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:chapter2/core/config/app_config.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 class Chapter2SocketService {
   Chapter2SocketService({String? gatewayUrl})
-      : _gatewayUrl = gatewayUrl ?? 'ws://localhost:3001';
+      : _gatewayUrl = gatewayUrl ?? AppConfig.websocketUrl;
 
   final String _gatewayUrl;
   WebSocketChannel? _channel;

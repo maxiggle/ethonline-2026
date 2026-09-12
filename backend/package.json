@@ -5,6 +5,11 @@
   "author": "Chapter 2 Team",
   "private": true,
   "license": "MIT",
+  "packageManager": "npm@10.8.2",
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
+  },
   "scripts": {
     "build": "nest build",
     "format": "prettier --write \"src/**/*.ts\"",

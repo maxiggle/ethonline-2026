@@ -5,8 +5,19 @@
     "rootDir": ".",
     "ignoreDeprecations": "5.0",
     "skipLibCheck": true,
-    "noImplicitAny": false
+    "noImplicitAny": false,
+    "typeRoots": [
+      "./backend/node_modules/@types"
+    ],
+    "types": [
+      "node"
+    ]
   },
+  "exclude": [
+    "backend",
+    "chapter2",
+    "node_modules"
+  ],
   "ts-node": {
     "transpileOnly": true
   }

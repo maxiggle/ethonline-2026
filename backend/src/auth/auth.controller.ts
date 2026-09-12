@@ -23,7 +23,11 @@ export class AuthController {
   @Post('login')
   @HttpCode(HttpStatus.OK)
   async login(@Body() dto: LoginDto) {
-    const identity = await this.authService.verifyAuthToken(dto.authToken);
+    const identity = await this.authService.verifyAuthToken(dto.authToken, {
+      email: dto.email,
+      name: dto.name,
+      walletAddress: dto.walletAddress,
+    });
     const syncedUser = await this.authService.syncUser(identity);
 
     return {

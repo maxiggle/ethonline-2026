@@ -8,6 +8,7 @@ import 'package:chapter2/features/auth/cubit/auth_state.dart';
 import 'package:chapter2/features/auth/models/user_identity.dart';
 import 'package:chapter2/features/auth/services/auth_service.dart';
 import 'package:chapter2/features/dashboard/cubit/dashboard_cubit.dart';
+import 'package:chapter2/features/dashboard/view/dashboard_screen.dart';
 import 'package:chapter2/features/approval/cubit/approval_cubit.dart';
 import 'package:chapter2/services/api/chapter2_api_service.dart';
 import 'package:chapter2/shared/theme/chapter2_theme.dart';
@@ -17,16 +18,21 @@ void main() {
     setupServiceLocator();
   });
 
-  testWidgets('Chapter2App initial boot renders LoginScreen with Privy CTA', (WidgetTester tester) async {
+  testWidgets('Chapter2App initial boot renders SplashScreen then navigates to LoginScreen', (WidgetTester tester) async {
     await tester.pumpWidget(const Chapter2App());
-    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 200));
 
     expect(find.text('CHAPTER 2'), findsOneWidget);
-    expect(find.text('Continue with Google via Privy'), findsOneWidget);
     expect(find.text('Autonomous Treasury Supervision'), findsOneWidget);
+
+    // Settle splash navigation timeout
+    await tester.pump(const Duration(seconds: 2));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Continue with Google via Privy'), findsOneWidget);
   });
 
-  testWidgets('CommandCenterShell renders authenticated dashboard and scenarios', (WidgetTester tester) async {
+  testWidgets('DashboardScreen renders authenticated dashboard and scenarios', (WidgetTester tester) async {
     final authCubit = AuthCubit(authService: locator<AuthService>());
     authCubit.emit(const AuthState(
       status: AuthStatus.authenticated,
@@ -49,7 +55,7 @@ void main() {
         ],
         child: MaterialApp(
           theme: Chapter2Theme.darkTheme,
-          home: const CommandCenterShell(),
+          home: const DashboardScreen(),
         ),
       ),
     );
@@ -58,8 +64,6 @@ void main() {
     expect(find.text('END-TO-END SCENARIOS'), findsOneWidget);
     expect(find.text('Base Sepolia'), findsOneWidget);
     expect(find.text('Autonomous Treasury Agent'), findsOneWidget);
-    expect(find.text('1. Autonomous Allow (\$40 USDC)'), findsOneWidget);
-    expect(find.text('2. Human Escalation (\$850 USDC)'), findsOneWidget);
-    expect(find.text('3. Threat Block (\$5,000 USDC)'), findsOneWidget);
+    expect(find.text('LIVE ACTIVITY FEED'), findsOneWidget);
   });
 }

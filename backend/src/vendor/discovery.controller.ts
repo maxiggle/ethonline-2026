@@ -1,9 +1,16 @@
-import { Controller, Get, Post, Query, Body, BadRequestException } from '@nestjs/common';
+import { Controller, Get, Post, Query, Body, Req, UseGuards } from '@nestjs/common';
 import { VendorService, BazaarResource } from './vendor.service';
+import { PrivyAuthGuard } from '../auth/guards/privy-auth.guard';
+import { AuthenticatedRequest } from '../auth/interfaces/authenticated-request.interface';
+import { AgentsService } from '../agents/agents.service';
+import { InvokeServiceDto } from './dto/invoke-service.dto';
 
 @Controller('discovery')
 export class DiscoveryController {
-  constructor(private readonly vendorService: VendorService) {}
+  constructor(
+    private readonly vendorService: VendorService,
+    private readonly agentsService: AgentsService,
+  ) {}
 
   @Get('resources')
   listResources(
@@ -61,18 +68,9 @@ export class DiscoveryController {
   }
 
   @Post('call')
-  async callService(
-    @Body()
-    dto: {
-      resourceUrl: string;
-      method?: string;
-      params?: Record<string, any>;
-      agentAddress?: string;
-    },
-  ) {
-    if (!dto.resourceUrl) {
-      throw new BadRequestException('resourceUrl is required');
-    }
+  @UseGuards(PrivyAuthGuard)
+  async callService(@Req() request: AuthenticatedRequest, @Body() dto: InvokeServiceDto) {
+    await this.agentsService.assertAgentOwnership(request.user.id, dto.agentAddress);
     return await this.vendorService.invokeService(
       dto.resourceUrl,
       dto.method,

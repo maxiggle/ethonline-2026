@@ -1,6 +1,8 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { HttpException, HttpStatus } from '@nestjs/common';
+import { ForbiddenException, HttpException, HttpStatus } from '@nestjs/common';
+import { GUARDS_METADATA } from '@nestjs/common/constants';
 import { VendorController } from './vendor.controller';
+import { DiscoveryController } from './discovery.controller';
 import { VendorService } from './vendor.service';
 import { OnChainExecutorService } from '../blockchain/on-chain-executor.service';
 import { ActionStoreService } from '../actions/action-store.service';
@@ -9,6 +11,9 @@ import { Eip712Service } from '../crypto/eip712.service';
 import { EventsGateway } from '../gateway/events.gateway';
 import { TreasuryActionStatus } from '../domain/treasury-action.entity';
 import { ActionsController } from '../actions/actions.controller';
+import { AgentsService } from '../agents/agents.service';
+import { PrivyAuthGuard } from '../auth/guards/privy-auth.guard';
+import { AuthenticatedRequest } from '../auth/interfaces/authenticated-request.interface';
 import { Response } from 'express';
 
 describe('VendorController (x402 Protocol & Company Bills)', () => {
@@ -16,6 +21,13 @@ describe('VendorController (x402 Protocol & Company Bills)', () => {
   let vendorService: VendorService;
   let actionStore: ActionStoreService;
   let onChainExecutor: OnChainExecutorService;
+
+  const agentAddress = '0x1111111111111111111111111111111111111111';
+  const ownerRequest = {
+    user: { id: 'did:privy:agent_owner', walletAddress: agentAddress },
+  } as unknown as AuthenticatedRequest;
+
+  const agentsService = { assertAgentOwnership: jest.fn() };
 
   const mockActionsController = {
     proposeAction: jest.fn().mockImplementation((dto) => {
@@ -36,11 +48,36 @@ describe('VendorController (x402 Protocol & Company Bills)', () => {
     }),
   };
 
+  const buildUnpaidBill = () => ({
+    id: 'bill_test_01',
+    provider: 'google_cloud' as const,
+    serviceName: 'Google Cloud Vertex AI',
+    accountId: 'billingAccounts/01A2B3',
+    organization: 'Acme Global',
+    invoiceNumber: 'INV-TEST-8812',
+    amount: '40000000',
+    amountUsdc: 40,
+    description: 'H100 Cluster Compute',
+    paymentIdentifier: 'test_inv_8812',
+    status: 'UNPAID_402' as const,
+    dueDate: '2026-09-30T00:00:00.000Z',
+    paymentRequirements: {
+      address: vendorService.vendorAddress,
+      amount: '40000000',
+      token: vendorService.tokenAddress,
+      chainId: vendorService.chainId,
+    },
+  });
+
   beforeEach(async () => {
     process.env.RPC_URL = 'https://sepolia.base.org';
     process.env.SAFE_ADDRESS = '0x4f712dd78Cb1a504C69CB4f68B82Fddb6b3b1df6';
     process.env.GUARD_ADDRESS = '0x9b6023D1B6D3b076C8d999Ba406AE486750ce7d3';
     process.env.CHAIN_ID = '84532';
+
+    mockActionsController.proposeAction.mockClear();
+    agentsService.assertAgentOwnership.mockReset();
+    agentsService.assertAgentOwnership.mockResolvedValue(undefined);
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [VendorController],
@@ -55,8 +92,12 @@ describe('VendorController (x402 Protocol & Company Bills)', () => {
           provide: ActionsController,
           useValue: mockActionsController,
         },
+        { provide: AgentsService, useValue: agentsService },
       ],
-    }).compile();
+    })
+      .overrideGuard(PrivyAuthGuard)
+      .useValue({ canActivate: () => true })
+      .compile();
 
     controller = module.get<VendorController>(VendorController);
     vendorService = module.get<VendorService>(VendorService);
@@ -66,6 +107,38 @@ describe('VendorController (x402 Protocol & Company Bills)', () => {
 
   it('should be defined', () => {
     expect(controller).toBeDefined();
+  });
+
+  describe('Route protection', () => {
+    it('should require Privy auth on account, billing and invocation routes', () => {
+      const protectedHandlers = [
+        VendorController.prototype.getConnectedAccounts,
+        VendorController.prototype.connectAccount,
+        VendorController.prototype.disconnectAccount,
+        VendorController.prototype.getBills,
+        VendorController.prototype.payBill,
+        VendorController.prototype.invokeService,
+        DiscoveryController.prototype.callService,
+      ];
+
+      for (const handler of protectedHandlers) {
+        expect(Reflect.getMetadata(GUARDS_METADATA, handler)).toContain(PrivyAuthGuard);
+      }
+    });
+
+    it('should keep x402 resource challenges and catalog discovery public', () => {
+      const publicHandlers = [
+        VendorController.prototype.getBill,
+        VendorController.prototype.getComputeResource,
+        VendorController.prototype.getWeather,
+        DiscoveryController.prototype.listResources,
+        DiscoveryController.prototype.searchResources,
+      ];
+
+      for (const handler of publicHandlers) {
+        expect(Reflect.getMetadata(GUARDS_METADATA, handler)).toBeUndefined();
+      }
+    });
   });
 
   describe('Connected Accounts', () => {
@@ -94,26 +167,7 @@ describe('VendorController (x402 Protocol & Company Bills)', () => {
     });
 
     it('should throw HTTP 402 with X-Payment-Identifier when bill is unpaid', async () => {
-      vendorService.addBill({
-        id: 'bill_test_01',
-        provider: 'google_cloud',
-        serviceName: 'Google Cloud Vertex AI',
-        accountId: 'billingAccounts/01A2B3',
-        organization: 'Acme Global',
-        invoiceNumber: 'INV-TEST-8812',
-        amount: '40000000',
-        amountUsdc: 40,
-        description: 'H100 Cluster Compute',
-        paymentIdentifier: 'test_inv_8812',
-        status: 'UNPAID_402',
-        dueDate: '2026-09-30T00:00:00.000Z',
-        paymentRequirements: {
-          address: vendorService.vendorAddress,
-          amount: '40000000',
-          token: vendorService.tokenAddress,
-          chainId: vendorService.chainId,
-        },
-      });
+      vendorService.addBill(buildUnpaidBill());
 
       const headersMap: Record<string, string> = {};
       const mockRes = {
@@ -139,34 +193,29 @@ describe('VendorController (x402 Protocol & Company Bills)', () => {
     });
 
     it('should dispatch agent to pay bill and settle via x402', async () => {
-      vendorService.addBill({
-        id: 'bill_test_01',
-        provider: 'google_cloud',
-        serviceName: 'Google Cloud Vertex AI',
-        accountId: 'billingAccounts/01A2B3',
-        organization: 'Acme Global',
-        invoiceNumber: 'INV-TEST-8812',
-        amount: '40000000',
-        amountUsdc: 40,
-        description: 'H100 Cluster Compute',
-        paymentIdentifier: 'test_inv_8812',
-        status: 'UNPAID_402',
-        dueDate: '2026-09-30T00:00:00.000Z',
-        paymentRequirements: {
-          address: vendorService.vendorAddress,
-          amount: '40000000',
-          token: vendorService.tokenAddress,
-          chainId: vendorService.chainId,
-        },
-      });
+      vendorService.addBill(buildUnpaidBill());
 
-      const result = await controller.payBill('bill_test_01', {
-        agentAddress: '0x1111111111111111111111111111111111111111',
-      });
+      const result = await controller.payBill(ownerRequest, 'bill_test_01', { agentAddress });
 
+      expect(agentsService.assertAgentOwnership).toHaveBeenCalledWith(
+        'did:privy:agent_owner',
+        agentAddress,
+      );
       expect(mockActionsController.proposeAction).toHaveBeenCalled();
       expect(result.bill.status).toBe('SETTLED_200');
       expect(result.bill.txHash).toBeDefined();
+    });
+
+    it('should refuse to pay a bill with an agent the caller does not own', async () => {
+      vendorService.addBill(buildUnpaidBill());
+      agentsService.assertAgentOwnership.mockRejectedValue(new ForbiddenException());
+
+      await expect(
+        controller.payBill(ownerRequest, 'bill_test_01', { agentAddress }),
+      ).rejects.toThrow(ForbiddenException);
+
+      expect(mockActionsController.proposeAction).not.toHaveBeenCalled();
+      expect(vendorService.getBillById('bill_test_01')?.status).toBe('UNPAID_402');
     });
   });
 
@@ -214,7 +263,7 @@ describe('VendorController (x402 Protocol & Company Bills)', () => {
         token: process.env.SAFE_ADDRESS!,
         recipient: vendorService.vendorAddress,
         amount: '40000000',
-        agentAddress: '0x1111111111111111111111111111111111111111',
+        agentAddress,
         justification: 'x402 compute payment',
       });
       actionStore.updateStatus(action.id, TreasuryActionStatus.EXECUTED, { txHash: realTxHash });
@@ -280,10 +329,11 @@ describe('VendorController (x402 Protocol & Company Bills)', () => {
 
   describe('Service Invocation (invokeService)', () => {
     it('should autonomously settle and invoke weather service', async () => {
-      const result = await controller.invokeService({
+      const result = await controller.invokeService(ownerRequest, {
         resourceUrl: 'https://chapter2-backend.onrender.com/vendor/weather',
         method: 'GET',
         params: { city: 'San Francisco' },
+        agentAddress,
       });
 
       expect(result.status).toBe('SUCCESS');

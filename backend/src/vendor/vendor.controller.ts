@@ -6,13 +6,16 @@ import {
   Param,
   Query,
   Headers,
+  Req,
   Res,
+  UseGuards,
   HttpException,
   HttpStatus,
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
 import { Response } from 'express';
+import { IsArray, IsEthereumAddress, IsIn, IsNotEmpty, IsOptional, IsString } from 'class-validator';
 import {
   VendorService,
   ComputeResourceGrant,
@@ -21,53 +24,71 @@ import {
 } from './vendor.service';
 import { ActionsController } from '../actions/actions.controller';
 import { ProposeActionDto } from '../domain/dto/propose-action.dto';
-import { TreasuryActionStatus } from '../domain/treasury-action.entity';
+import { PrivyAuthGuard } from '../auth/guards/privy-auth.guard';
+import { AuthenticatedRequest } from '../auth/interfaces/authenticated-request.interface';
+import { AgentsService } from '../agents/agents.service';
+import { InvokeServiceDto } from './dto/invoke-service.dto';
 
 export class ConnectAccountDto {
+  @IsIn(['google_cloud', 'aws', 'alchemy', 'openai'])
   provider: 'google_cloud' | 'aws' | 'alchemy' | 'openai';
+
+  @IsString()
+  @IsNotEmpty()
   name: string;
+
+  @IsString()
+  @IsNotEmpty()
   organization: string;
+
+  @IsString()
+  @IsNotEmpty()
   accountId: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
   projects?: string[];
 }
 
 export class PayBillDto {
-  agentAddress?: string;
+  @IsEthereumAddress()
+  agentAddress: string;
 }
 
+/**
+ * Account, billing and invocation routes act on the treasury and require an authenticated agent owner.
+ * x402 resource routes (bills/:id, compute, weather) stay public: the on-chain payment is the authorization.
+ */
 @Controller('vendor')
 export class VendorController {
   constructor(
     private readonly vendorService: VendorService,
     private readonly actionsController: ActionsController,
+    private readonly agentsService: AgentsService,
   ) {}
 
-  // -------------------------------------------------------------
-  // Connected Accounts Endpoints
-  // -------------------------------------------------------------
   @Get('accounts')
+  @UseGuards(PrivyAuthGuard)
   getConnectedAccounts(): ConnectedAccount[] {
     return this.vendorService.getConnectedAccounts();
   }
 
   @Post('accounts/connect')
+  @UseGuards(PrivyAuthGuard)
   connectAccount(@Body() dto: ConnectAccountDto): ConnectedAccount {
-    if (!dto.provider || !dto.accountId || !dto.name) {
-      throw new BadRequestException('provider, accountId, and name are required');
-    }
     return this.vendorService.connectAccount(dto);
   }
 
   @Post('accounts/:id/disconnect')
+  @UseGuards(PrivyAuthGuard)
   disconnectAccount(@Param('id') id: string): { success: boolean } {
     const ok = this.vendorService.disconnectAccount(id);
     return { success: ok };
   }
 
-  // -------------------------------------------------------------
-  // Company Invoices & x402 Bills Endpoints
-  // -------------------------------------------------------------
   @Get('bills')
+  @UseGuards(PrivyAuthGuard)
   getBills(): CompanyBill[] {
     return this.vendorService.getBills();
   }
@@ -121,7 +142,9 @@ export class VendorController {
   }
 
   @Post('bills/:id/pay')
+  @UseGuards(PrivyAuthGuard)
   async payBill(
+    @Req() request: AuthenticatedRequest,
     @Param('id') id: string,
     @Body() dto: PayBillDto,
   ): Promise<{
@@ -135,6 +158,8 @@ export class VendorController {
       throw new NotFoundException(`Company bill with ID '${id}' not found`);
     }
 
+    await this.agentsService.assertAgentOwnership(request.user.id, dto.agentAddress);
+
     // Check account connection status
     const accounts = this.vendorService.getConnectedAccounts();
     const account = accounts.find((a) => a.accountId === bill.accountId);
@@ -144,8 +169,6 @@ export class VendorController {
       );
     }
 
-    const effectiveAgent = dto.agentAddress || '0x4f712dd78Cb1a504C69CB4f68B82Fddb6b3b1df6';
-
     const proposePayload: ProposeActionDto = {
       target: bill.paymentRequirements.token,
       value: '0',
@@ -153,7 +176,7 @@ export class VendorController {
       token: bill.paymentRequirements.token,
       recipient: bill.paymentRequirements.address,
       amount: bill.amount,
-      agentAddress: effectiveAgent,
+      agentAddress: dto.agentAddress,
       justification: `${bill.serviceName} [${bill.invoiceNumber}]: ${bill.description} (Identifier: ${bill.paymentIdentifier})`,
     };
 
@@ -172,9 +195,6 @@ export class VendorController {
     };
   }
 
-  // -------------------------------------------------------------
-  // Legacy Single Compute Endpoint
-  // -------------------------------------------------------------
   @Get('compute')
   async getComputeResource(
     @Headers('x-payment-txhash') paymentTxHash: string | undefined,
@@ -209,9 +229,6 @@ export class VendorController {
     return await this.vendorService.verifyAndGrantAccess(paymentTxHash);
   }
 
-  // -------------------------------------------------------------
-  // Weather Oracle x402 Endpoint
-  // -------------------------------------------------------------
   @Get('weather')
   async getWeather(
     @Query('city') city: string | undefined,
@@ -249,22 +266,10 @@ export class VendorController {
     return this.vendorService.getWeatherTelemetry(cityName, paymentTxHash);
   }
 
-  // -------------------------------------------------------------
-  // Direct Service Invocation with x402 Settlement
-  // -------------------------------------------------------------
   @Post('invoke')
-  async invokeService(
-    @Body()
-    dto: {
-      resourceUrl: string;
-      method?: string;
-      params?: Record<string, any>;
-      agentAddress?: string;
-    },
-  ) {
-    if (!dto.resourceUrl) {
-      throw new BadRequestException('resourceUrl is required');
-    }
+  @UseGuards(PrivyAuthGuard)
+  async invokeService(@Req() request: AuthenticatedRequest, @Body() dto: InvokeServiceDto) {
+    await this.agentsService.assertAgentOwnership(request.user.id, dto.agentAddress);
     return await this.vendorService.invokeService(
       dto.resourceUrl,
       dto.method,

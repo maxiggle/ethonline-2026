@@ -8,8 +8,9 @@ import {
   type ExecuteDeviceActionReturnType,
 } from "@ledgerhq/device-management-kit";
 import { webHidTransportFactory } from "@ledgerhq/device-transport-kit-web-hid";
-import { SignerEthBuilder, type SignerEth } from "@ledgerhq/device-signer-kit-ethereum";
+import { SignerEthBuilder, type SignerEth, type TypedData } from "@ledgerhq/device-signer-kit-ethereum";
 import { firstValueFrom } from "rxjs";
+import type { DeviceSignature } from "./types";
 
 export const AGENT_APPROVER_DERIVATION_PATH = "44'/60'/0'/0/0";
 
@@ -142,4 +143,16 @@ export function getApproverAddress(signerEth: SignerEth, onStatus?: (message: st
   return awaitDeviceAction(signerEth.getAddress(AGENT_APPROVER_DERIVATION_PATH, { checkOnDevice: false }), onStatus).then(
     (output) => output.address,
   );
+}
+
+export function signEscalationTypedData(
+  signerEth: SignerEth,
+  typedData: TypedData,
+  onStatus?: (message: string) => void,
+): Promise<DeviceSignature> {
+  return awaitDeviceAction(signerEth.signTypedData(AGENT_APPROVER_DERIVATION_PATH, typedData), onStatus);
+}
+
+export function signRejection(signerEth: SignerEth, message: string, onStatus?: (message: string) => void): Promise<DeviceSignature> {
+  return awaitDeviceAction(signerEth.signMessage(AGENT_APPROVER_DERIVATION_PATH, message), onStatus);
 }

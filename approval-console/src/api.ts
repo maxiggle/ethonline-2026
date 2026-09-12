@@ -39,3 +39,17 @@ export function fetchApprovalConfig(): Promise<ApprovalConfig> {
 export function fetchPendingApprovals(): Promise<PendingApproval[]> {
   return requestJson<PendingApproval[]>("/x402/approvals/pending");
 }
+
+export function submitApprovalSignature(actionId: string, signature: `0x${string}`): Promise<unknown> {
+  return requestJson(`/x402/approvals/${actionId}/signature`, {
+    method: "POST",
+    body: JSON.stringify({ signature }),
+  });
+}
+
+export function submitApprovalRejection(actionId: string, signature: `0x${string}`): Promise<unknown> {
+  return requestJson(`/x402/approvals/${actionId}/reject`, {
+    method: "POST",
+    body: JSON.stringify({ signature }),
+  });
+}

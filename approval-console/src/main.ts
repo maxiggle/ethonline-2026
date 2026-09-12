@@ -1,7 +1,8 @@
 import "./style.css";
-import { fetchApprovalConfig, fetchPendingApprovals, ApiError } from "./api";
+import { ApiError, fetchApprovalConfig, fetchPendingApprovals, submitApprovalRejection, submitApprovalSignature } from "./api";
 import { formatUsdcAmount, formatValidBefore, shortenAddress } from "./format";
-import { connectLedger, getApproverAddress, isWebHidSupported } from "./ledger";
+import { connectLedger, getApproverAddress, isWebHidSupported, signEscalationTypedData, signRejection } from "./ledger";
+import { assembleEip191Signature, rejectionMessage, withEip712DomainType } from "./signature";
 import type { ApprovalConfig, PendingApproval } from "./types";
 
 const PENDING_POLL_INTERVAL_MS = 3000;
@@ -16,6 +17,8 @@ interface AppState {
   signerEth: Awaited<ReturnType<typeof connectLedger>>["signerEth"] | null;
   pending: PendingApproval[];
   pendingError: string | null;
+  cardMessages: Map<string, { text: string; tone: "info" | "error" }>;
+  busyActionIds: Set<string>;
 }
 
 const state: AppState = {
@@ -27,6 +30,8 @@ const state: AppState = {
   signerEth: null,
   pending: [],
   pendingError: null,
+  cardMessages: new Map(),
+  busyActionIds: new Set(),
 };
 
 const app = document.querySelector<HTMLDivElement>("#app");
@@ -36,6 +41,19 @@ if (!app) {
 
 function isApproverMismatched(): boolean {
   return Boolean(state.config && state.approverAddress && state.config.approverAddress.toLowerCase() !== state.approverAddress.toLowerCase());
+}
+
+function canApprove(): boolean {
+  return Boolean(state.signerEth && state.approverAddress && !isApproverMismatched());
+}
+
+function setCardMessage(actionId: string, text: string, tone: "info" | "error"): void {
+  state.cardMessages.set(actionId, { text, tone });
+  render();
+}
+
+function clearCardMessage(actionId: string): void {
+  state.cardMessages.delete(actionId);
 }
 
 async function handleConnect(): Promise<void> {
@@ -56,6 +74,57 @@ async function handleConnect(): Promise<void> {
     state.connectionError = error instanceof Error ? error.message : "Failed to connect to the Ledger device.";
   } finally {
     state.connecting = false;
+    render();
+  }
+}
+
+async function handleApprove(approval: PendingApproval): Promise<void> {
+  if (!state.signerEth) {
+    return;
+  }
+  state.busyActionIds.add(approval.actionId);
+  clearCardMessage(approval.actionId);
+  render();
+  try {
+    const typedData = withEip712DomainType(approval.typedData);
+    const deviceSignature = await signEscalationTypedData(state.signerEth, typedData, (message) => {
+      if (message) {
+        setCardMessage(approval.actionId, message, "info");
+      }
+    });
+    const signature = assembleEip191Signature(deviceSignature);
+    await submitApprovalSignature(approval.actionId, signature);
+    setCardMessage(approval.actionId, "Approved and signed on the Ledger.", "info");
+    await refreshPendingApprovals();
+  } catch (error) {
+    setCardMessage(approval.actionId, describeActionError(error), "error");
+  } finally {
+    state.busyActionIds.delete(approval.actionId);
+    render();
+  }
+}
+
+async function handleReject(approval: PendingApproval): Promise<void> {
+  if (!state.signerEth) {
+    return;
+  }
+  state.busyActionIds.add(approval.actionId);
+  clearCardMessage(approval.actionId);
+  render();
+  try {
+    const deviceSignature = await signRejection(state.signerEth, rejectionMessage(approval.actionId), (message) => {
+      if (message) {
+        setCardMessage(approval.actionId, message, "info");
+      }
+    });
+    const signature = assembleEip191Signature(deviceSignature);
+    await submitApprovalRejection(approval.actionId, signature);
+    setCardMessage(approval.actionId, "Rejected on the Ledger.", "info");
+    await refreshPendingApprovals();
+  } catch (error) {
+    setCardMessage(approval.actionId, describeActionError(error), "error");
+  } finally {
+    state.busyActionIds.delete(approval.actionId);
     render();
   }
 }
@@ -125,6 +194,9 @@ function renderConnectionStatus(): string {
 }
 
 function renderCard(approval: PendingApproval): string {
+  const busy = state.busyActionIds.has(approval.actionId);
+  const message = state.cardMessages.get(approval.actionId);
+  const disableActions = busy || !canApprove();
   return `
     <div class="card" data-action-id="${escapeHtml(approval.actionId)}">
       <div class="card-header">
@@ -139,6 +211,11 @@ function renderCard(approval: PendingApproval): string {
         <dt>Expires</dt><dd>${escapeHtml(formatValidBefore(approval.typedData.message.validBefore))}</dd>
       </dl>
       ${approval.reasons.length > 0 ? `<div class="reasons">Guardian: ${escapeHtml(approval.reasons.join("; "))}</div>` : ""}
+      <div class="card-actions">
+        <button class="primary" data-action="approve" ${disableActions ? "disabled" : ""}>Approve on Ledger</button>
+        <button class="danger" data-action="reject" ${disableActions ? "disabled" : ""}>Reject on Ledger</button>
+      </div>
+      ${message ? `<div class="card-status" style="color:${message.tone === "error" ? "var(--block)" : "var(--accent)"}">${escapeHtml(message.text)}</div>` : ""}
     </div>
   `;
 }
@@ -184,6 +261,20 @@ function render(): void {
 
   document.querySelector("#connect-button")?.addEventListener("click", () => {
     void handleConnect();
+  });
+
+  app!.querySelectorAll<HTMLElement>(".card").forEach((cardElement) => {
+    const actionId = cardElement.dataset.actionId;
+    const approval = state.pending.find((candidate) => candidate.actionId === actionId);
+    if (!approval) {
+      return;
+    }
+    cardElement.querySelector('[data-action="approve"]')?.addEventListener("click", () => {
+      void handleApprove(approval);
+    });
+    cardElement.querySelector('[data-action="reject"]')?.addEventListener("click", () => {
+      void handleReject(approval);
+    });
   });
 }
 

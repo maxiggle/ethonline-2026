@@ -93,45 +93,22 @@ export interface BazaarResource {
 export class VendorService {
   private readonly logger = new Logger(VendorService.name);
 
-  // Approved Vendor Recipient from Chapter 2 mandate
-  public readonly vendorAddress = '0x0000000000000000000000000000000000041c4e';
   public readonly tokenAddress: string;
-  public readonly requiredAmount = '40000000'; // 40 USDC (6 decimals)
   public readonly chainId: number;
 
-  private connectedAccounts: ConnectedAccount[] = [
-    {
-      id: 'acc_gcp_01',
-      provider: 'google_cloud',
-      name: 'Google Cloud Platform (GCP)',
-      organization: 'Acme Global Enterprises Inc.',
-      accountId: 'billingAccounts/01A2B3-456C7D-89EF01',
-      status: 'CONNECTED',
-      connectedAt: '2026-09-01T08:00:00.000Z',
-      projects: ['vertex-ai-models', 'h100-gpu-cluster-prod', 'acme-data-lake'],
-    },
-    {
-      id: 'acc_aws_02',
-      provider: 'aws',
-      name: 'Amazon Web Services (AWS)',
-      organization: 'Acme Global Enterprises Inc.',
-      accountId: '129384918231',
-      status: 'CONNECTED',
-      connectedAt: '2026-08-15T12:30:00.000Z',
-      projects: ['guardduty-defense', 'waf-edge-network'],
-    },
-    {
-      id: 'acc_alc_03',
-      provider: 'alchemy',
-      name: 'Alchemy Supernode Engine',
-      organization: 'Acme Global Enterprises Inc.',
-      accountId: 'alc_team_acme_2026',
-      status: 'CONNECTED',
-      connectedAt: '2026-08-20T10:15:00.000Z',
-      projects: ['base-sepolia-archive-cluster'],
-    },
-  ];
+  public get vendorAddress(): string {
+    return (
+      process.env.VENDOR_RECIPIENT_ADDRESS ||
+      process.env.SAFE_ADDRESS ||
+      '0x0000000000000000000000000000000000000000'
+    );
+  }
 
+  public get requiredAmount(): string {
+    return '40000000'; // 40 USDC (6 decimals)
+  }
+
+  private connectedAccounts: ConnectedAccount[] = [];
   private bills: CompanyBill[] = [];
 
   constructor(
@@ -151,73 +128,6 @@ export class VendorService {
 
     this.tokenAddress = safeAddress;
     this.chainId = Number(chainId);
-
-    this.initBills();
-  }
-
-  private initBills() {
-    this.bills = [
-      {
-        id: 'bill_gcp_vertex_01',
-        provider: 'google_cloud',
-        serviceName: 'Google Cloud Vertex AI & H100 Cluster',
-        accountId: 'billingAccounts/01A2B3-456C7D-89EF01',
-        organization: 'Acme Global Enterprises Inc.',
-        invoiceNumber: 'INV-GCP-2026-09-8812',
-        amount: '40000000', // 40 USDC
-        amountUsdc: 40.0,
-        description: 'Autonomous H100 GPU compute cluster allocation & fine-tuning inference',
-        paymentIdentifier: 'gcp_01a2b3_inv_8812',
-        status: 'UNPAID_402',
-        dueDate: '2026-09-18T23:59:59.000Z',
-        paymentRequirements: {
-          address: this.vendorAddress,
-          amount: '40000000',
-          token: this.tokenAddress,
-          chainId: this.chainId,
-        },
-      },
-      {
-        id: 'bill_aws_guardduty_02',
-        provider: 'aws',
-        serviceName: 'AWS Enterprise Cloud Security & WAF',
-        accountId: '129384918231',
-        organization: 'Acme Global Enterprises Inc.',
-        invoiceNumber: 'INV-AWS-2026-09-1049',
-        amount: '850000000', // 850 USDC (exceeds $500 daily limit, triggers Face ID escalation!)
-        amountUsdc: 850.0,
-        description: 'Dedicated Cloud Security Cluster & Threat Intelligence Annual Renewal',
-        paymentIdentifier: 'aws_129384_inv_1049',
-        status: 'UNPAID_402',
-        dueDate: '2026-09-20T23:59:59.000Z',
-        paymentRequirements: {
-          address: this.vendorAddress,
-          amount: '850000000',
-          token: this.tokenAddress,
-          chainId: this.chainId,
-        },
-      },
-      {
-        id: 'bill_alc_rpc_03',
-        provider: 'alchemy',
-        serviceName: 'Alchemy Dedicated RPC Node Infrastructure',
-        accountId: 'alc_team_acme_2026',
-        organization: 'Acme Global Enterprises Inc.',
-        invoiceNumber: 'INV-ALC-2026-09-0211',
-        amount: '25000000', // 25 USDC
-        amountUsdc: 25.0,
-        description: 'Base Sepolia High-Throughput Archive Node Bandwidth',
-        paymentIdentifier: 'alc_team_inv_0211',
-        status: 'UNPAID_402',
-        dueDate: '2026-09-22T23:59:59.000Z',
-        paymentRequirements: {
-          address: this.vendorAddress,
-          amount: '25000000',
-          token: this.tokenAddress,
-          chainId: this.chainId,
-        },
-      },
-    ];
   }
 
   // --- Accounts API ---
@@ -301,6 +211,11 @@ export class VendorService {
     return bill;
   }
 
+  addBill(bill: CompanyBill): CompanyBill {
+    this.bills.push(bill);
+    return bill;
+  }
+
   // --- Legacy Compute Requirements ---
   getPaymentRequirements(): PaymentRequirements {
     return {
@@ -350,10 +265,10 @@ export class VendorService {
 
     this.logger.log(`x402 Payment verified for tx ${txHash}. Unlocking compute session.`);
 
-    // If matches any bill, mark it settled
-    const gcpBill = this.bills.find((b) => b.id === 'bill_gcp_vertex_01');
-    if (gcpBill && gcpBill.status === 'UNPAID_402') {
-      this.markBillSettled(gcpBill.id, txHash);
+    // If matches any active bill, mark it settled
+    const matchedBill = this.bills.find((b) => b.status === 'UNPAID_402');
+    if (matchedBill) {
+      this.markBillSettled(matchedBill.id, txHash);
     }
 
     const now = Date.now();
@@ -377,132 +292,6 @@ export class VendorService {
     const baseUrl = process.env.RENDER_EXTERNAL_URL || 'https://chapter2-backend.onrender.com';
 
     return [
-      {
-        resource: `${baseUrl}/vendor/bills/bill_gcp_vertex_01`,
-        type: 'http',
-        x402Version: 2,
-        lastUpdated: new Date().toISOString(),
-        accepts: [
-          {
-            network: `eip155:${this.chainId}`,
-            asset: this.tokenAddress,
-            amount: '40000000',
-            payTo: this.vendorAddress,
-            scheme: 'exact',
-            extra: {
-              name: 'USD Coin',
-              version: '2',
-              paymentIdentifier: 'gcp_01a2b3_inv_8812',
-            },
-          },
-        ],
-        extensions: {
-          bazaar: {
-            info: {
-              serviceName: 'Google Cloud Vertex AI & H100 Cluster',
-              description: 'Autonomous H100 GPU compute cluster allocation & fine-tuning inference',
-              tags: ['gpu', 'ai', 'compute', 'google-cloud', 'h100'],
-              input: {
-                type: 'http',
-                method: 'GET',
-                queryParams: {
-                  clusterId: 'vertex-h100-node-01',
-                },
-              },
-              output: {
-                type: 'json',
-                example: {
-                  status: 'UNLOCKED',
-                  sessionToken: 'sess_17892289_9a8f21',
-                  specs: '1x NVIDIA H100 Tensor Core GPU (80GB SXM5)',
-                },
-              },
-            },
-          },
-        },
-      },
-      {
-        resource: `${baseUrl}/vendor/bills/bill_aws_guardduty_02`,
-        type: 'http',
-        x402Version: 2,
-        lastUpdated: new Date().toISOString(),
-        accepts: [
-          {
-            network: `eip155:${this.chainId}`,
-            asset: this.tokenAddress,
-            amount: '850000000',
-            payTo: this.vendorAddress,
-            scheme: 'exact',
-            extra: {
-              name: 'USD Coin',
-              version: '2',
-              paymentIdentifier: 'aws_129384_inv_1049',
-            },
-          },
-        ],
-        extensions: {
-          bazaar: {
-            info: {
-              serviceName: 'AWS Enterprise Cloud Security & WAF',
-              description: 'Dedicated Cloud Security Cluster & Threat Intelligence Annual Subscription',
-              tags: ['security', 'aws', 'waf', 'guardduty', 'threat-defense'],
-              input: {
-                type: 'http',
-                method: 'GET',
-              },
-              output: {
-                type: 'json',
-                example: {
-                  status: 'UNLOCKED',
-                  licenseKey: 'aws-ent-sec-2026-904',
-                  activeRules: 24,
-                },
-              },
-            },
-          },
-        },
-      },
-      {
-        resource: `${baseUrl}/vendor/bills/bill_alc_rpc_03`,
-        type: 'http',
-        x402Version: 2,
-        lastUpdated: new Date().toISOString(),
-        accepts: [
-          {
-            network: `eip155:${this.chainId}`,
-            asset: this.tokenAddress,
-            amount: '25000000',
-            payTo: this.vendorAddress,
-            scheme: 'exact',
-            extra: {
-              name: 'USD Coin',
-              version: '2',
-              paymentIdentifier: 'alc_team_inv_0211',
-            },
-          },
-        ],
-        extensions: {
-          bazaar: {
-            info: {
-              serviceName: 'Alchemy Dedicated RPC Node Infrastructure',
-              description: 'Base Sepolia High-Throughput Archive Node Bandwidth',
-              tags: ['rpc', 'alchemy', 'node', 'archive', 'ethereum'],
-              input: {
-                type: 'http',
-                method: 'GET',
-              },
-              output: {
-                type: 'json',
-                example: {
-                  status: 'UNLOCKED',
-                  endpoint: 'https://base-sepolia.g.alchemy.com/v2/private-dedicated',
-                  dailyComputeUnits: 50000000,
-                },
-              },
-            },
-          },
-        },
-      },
       {
         resource: `${baseUrl}/vendor/weather`,
         type: 'http',
@@ -545,6 +334,52 @@ export class VendorService {
                   conditions: 'Partly Cloudy',
                   humidity: 68,
                   windSpeedKph: 14.2,
+                },
+              },
+            },
+          },
+        },
+      },
+      {
+        resource: `${baseUrl}/vendor/compute`,
+        type: 'http',
+        x402Version: 2,
+        lastUpdated: new Date().toISOString(),
+        accepts: [
+          {
+            network: `eip155:${this.chainId}`,
+            asset: this.tokenAddress,
+            amount: '40000000', // 40.00 USDC
+            payTo: this.vendorAddress,
+            scheme: 'exact',
+            extra: {
+              name: 'USD Coin',
+              version: '2',
+              paymentIdentifier: 'compute_cluster_session_01',
+            },
+          },
+        ],
+        extensions: {
+          bazaar: {
+            info: {
+              serviceName: 'Decentralized GPU Compute & AI Inference',
+              description:
+                'Autonomous H100 GPU compute cluster allocation, model inference, and fine-tuning',
+              tags: ['compute', 'gpu', 'ai', 'inference', 'h100', 'cluster', 'nvidia'],
+              input: {
+                type: 'http',
+                method: 'GET',
+                queryParams: {
+                  clusterId: 'vertex-h100-node-01',
+                },
+              },
+              output: {
+                type: 'json',
+                example: {
+                  status: 'UNLOCKED',
+                  sessionToken: 'sess_live_cluster_alloc',
+                  specs: '1x NVIDIA H100 Tensor Core GPU (80GB SXM5)',
+                  allocatedVramGb: 80,
                 },
               },
             },
@@ -657,7 +492,7 @@ export class VendorService {
     if (service.resource.includes('/vendor/weather')) {
       const city = (finalParams.city as string) || 'San Francisco';
       responseData = this.getWeatherTelemetry(city, txHash);
-    } else if (service.resource.includes('/vendor/bills/bill_gcp_vertex_01')) {
+    } else if (service.resource.includes('/vendor/compute')) {
       responseData = await this.verifyAndGrantAccess(txHash);
     } else {
       responseData = {

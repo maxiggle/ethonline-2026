@@ -70,12 +70,9 @@ describe('VendorController (x402 Protocol & Company Bills)', () => {
   });
 
   describe('Connected Accounts', () => {
-    it('should return default enterprise accounts (Google Cloud, AWS, Alchemy)', () => {
+    it('should return empty connected accounts initially', () => {
       const accounts = controller.getConnectedAccounts();
-      expect(accounts.length).toBeGreaterThanOrEqual(3);
-      expect(accounts.some((a) => a.provider === 'google_cloud')).toBe(true);
-      expect(accounts.some((a) => a.provider === 'aws')).toBe(true);
-      expect(accounts.some((a) => a.provider === 'alchemy')).toBe(true);
+      expect(accounts).toEqual([]);
     });
 
     it('should connect a new corporate account', () => {
@@ -87,20 +84,38 @@ describe('VendorController (x402 Protocol & Company Bills)', () => {
       });
       expect(newAcc.accountId).toBe('org-acme-prod-2026');
       expect(newAcc.status).toBe('CONNECTED');
+      expect(controller.getConnectedAccounts().length).toBe(1);
     });
   });
 
   describe('Company Bills & x402 Challenge', () => {
-    it('should return list of active company bills', () => {
+    it('should return empty list of company bills initially', () => {
       const bills = controller.getBills();
-      expect(bills.length).toBeGreaterThanOrEqual(3);
-      const gcpBill = bills.find((b) => b.id === 'bill_gcp_vertex_01');
-      expect(gcpBill).toBeDefined();
-      expect(gcpBill?.amountUsdc).toBe(40);
-      expect(gcpBill?.paymentIdentifier).toBe('gcp_01a2b3_inv_8812');
+      expect(bills).toEqual([]);
     });
 
     it('should throw HTTP 402 with X-Payment-Identifier when bill is unpaid', async () => {
+      vendorService.addBill({
+        id: 'bill_test_01',
+        provider: 'google_cloud',
+        serviceName: 'Google Cloud Vertex AI',
+        accountId: 'billingAccounts/01A2B3',
+        organization: 'Acme Global',
+        invoiceNumber: 'INV-TEST-8812',
+        amount: '40000000',
+        amountUsdc: 40,
+        description: 'H100 Cluster Compute',
+        paymentIdentifier: 'test_inv_8812',
+        status: 'UNPAID_402',
+        dueDate: '2026-09-30T00:00:00.000Z',
+        paymentRequirements: {
+          address: vendorService.vendorAddress,
+          amount: '40000000',
+          token: vendorService.tokenAddress,
+          chainId: vendorService.chainId,
+        },
+      });
+
       const headersMap: Record<string, string> = {};
       const mockRes = {
         setHeader: jest.fn((key: string, val: string) => {
@@ -109,7 +124,7 @@ describe('VendorController (x402 Protocol & Company Bills)', () => {
       } as unknown as Response;
 
       try {
-        await controller.getBill('bill_gcp_vertex_01', undefined, mockRes);
+        await controller.getBill('bill_test_01', undefined, mockRes);
         fail('Should have thrown HttpException');
       } catch (err) {
         expect(err).toBeInstanceOf(HttpException);
@@ -117,15 +132,36 @@ describe('VendorController (x402 Protocol & Company Bills)', () => {
 
         expect(mockRes.setHeader).toHaveBeenCalledWith(
           'X-Payment-Address',
-          '0x0000000000000000000000000000000000041c4e',
+          vendorService.vendorAddress,
         );
         expect(mockRes.setHeader).toHaveBeenCalledWith('X-Payment-Amount', '40000000');
-        expect(mockRes.setHeader).toHaveBeenCalledWith('X-Payment-Identifier', 'gcp_01a2b3_inv_8812');
+        expect(mockRes.setHeader).toHaveBeenCalledWith('X-Payment-Identifier', 'test_inv_8812');
       }
     });
 
     it('should dispatch agent to pay bill and settle via x402', async () => {
-      const result = await controller.payBill('bill_gcp_vertex_01', {
+      vendorService.addBill({
+        id: 'bill_test_01',
+        provider: 'google_cloud',
+        serviceName: 'Google Cloud Vertex AI',
+        accountId: 'billingAccounts/01A2B3',
+        organization: 'Acme Global',
+        invoiceNumber: 'INV-TEST-8812',
+        amount: '40000000',
+        amountUsdc: 40,
+        description: 'H100 Cluster Compute',
+        paymentIdentifier: 'test_inv_8812',
+        status: 'UNPAID_402',
+        dueDate: '2026-09-30T00:00:00.000Z',
+        paymentRequirements: {
+          address: vendorService.vendorAddress,
+          amount: '40000000',
+          token: vendorService.tokenAddress,
+          chainId: vendorService.chainId,
+        },
+      });
+
+      const result = await controller.payBill('bill_test_01', {
         agentAddress: '0x1111111111111111111111111111111111111111',
       });
 
@@ -153,7 +189,7 @@ describe('VendorController (x402 Protocol & Company Bills)', () => {
 
         expect(mockRes.setHeader).toHaveBeenCalledWith(
           'X-Payment-Address',
-          '0x0000000000000000000000000000000000041c4e',
+          vendorService.vendorAddress,
         );
         expect(mockRes.setHeader).toHaveBeenCalledWith('X-Payment-Amount', '40000000');
         expect(mockRes.setHeader).toHaveBeenCalledWith(
@@ -177,7 +213,7 @@ describe('VendorController (x402 Protocol & Company Bills)', () => {
         value: '0',
         data: '0x',
         token: process.env.SAFE_ADDRESS!,
-        recipient: '0x0000000000000000000000000000000000041c4e',
+        recipient: vendorService.vendorAddress,
         amount: '40000000',
         agentAddress: '0x1111111111111111111111111111111111111111',
         justification: 'x402 compute payment',

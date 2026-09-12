@@ -12,7 +12,7 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
       // Dynamic import for ESM compatibility in CommonJS runtime
       // @ts-ignore
       const postgresMod = await import('@prisma/orm-postgres/runtime');
-      const postgres = postgresMod.default || postgresMod;
+      const postgres: any = postgresMod.default || postgresMod;
 
       const candidates = [
         path.resolve(__dirname, '../prisma/contract.json'),

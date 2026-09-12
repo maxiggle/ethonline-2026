@@ -12,6 +12,7 @@ import { BlockchainModule } from './blockchain/blockchain.module';
 import { VendorModule } from './vendor/vendor.module';
 import { AuthModule } from './auth/auth.module';
 import { AgentsModule } from './agents/agents.module';
+import { X402Module } from './x402/x402.module';
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { AgentsModule } from './agents/agents.module';
     WorldModule,
     GatewayModule,
     ActionsModule,
+    X402Module,
   ],
   controllers: [],
   providers: [],

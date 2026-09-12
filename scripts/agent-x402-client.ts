@@ -150,66 +150,69 @@ async function main() {
   console.log('');
 
   const targetBill = bills.find((b: any) => b.amountUsdc <= 50) || bills[0];
+  let billTxHash: string | undefined;
+
   if (!targetBill) {
-    throw new Error('No corporate bills found in directory to process');
-  }
-  const billId = targetBill.id;
+    console.log('[INFO] No pending corporate bills in queue (Clean zero-fallback state).');
+  } else {
+    const billId = targetBill.id;
 
-  // -------------------------------------------------------------
-  // STEP 3: Request x402 Challenge for Bill (${targetBill.invoiceNumber})
-  // -------------------------------------------------------------
-  console.log('-------------------------------------------------------------');
-  console.log(`[STEP 3] Fetching x402 Challenge: GET /vendor/bills/${billId}`);
-  console.log('-------------------------------------------------------------');
+    // -------------------------------------------------------------
+    // STEP 3: Request x402 Challenge for Bill (${targetBill.invoiceNumber})
+    // -------------------------------------------------------------
+    console.log('-------------------------------------------------------------');
+    console.log(`[STEP 3] Fetching x402 Challenge: GET /vendor/bills/${billId}`);
+    console.log('-------------------------------------------------------------');
 
-  const challengeRes = await fetch(`${serverUrl}/vendor/bills/${billId}`);
-  console.log(`[HTTP RESPONSE] Status: ${challengeRes.status} ${challengeRes.statusText}`);
+    const challengeRes = await fetch(`${serverUrl}/vendor/bills/${billId}`);
+    console.log(`[HTTP RESPONSE] Status: ${challengeRes.status} ${challengeRes.statusText}`);
 
-  const paymentAddress = challengeRes.headers.get('x-payment-address');
-  const paymentAmount = challengeRes.headers.get('x-payment-amount');
-  const paymentToken = challengeRes.headers.get('x-payment-token');
-  const paymentIdentifier = challengeRes.headers.get('x-payment-identifier');
+    const paymentAddress = challengeRes.headers.get('x-payment-address');
+    const paymentAmount = challengeRes.headers.get('x-payment-amount');
+    const paymentToken = challengeRes.headers.get('x-payment-token');
+    const paymentIdentifier = challengeRes.headers.get('x-payment-identifier');
 
-  console.log('\n[x402 CHALLENGE DETAILS]');
-  console.log(`  ├─ Vendor Payment Address : ${paymentAddress}`);
-  console.log(`  ├─ Required Token Amount  : ${paymentAmount} (${Number(paymentAmount || 0) / 1e6} USDC)`);
-  console.log(`  ├─ Approved Token Address : ${paymentToken}`);
-  console.log(`  └─ Payment Identifier     : ${paymentIdentifier}\n`);
+    console.log('\n[x402 CHALLENGE DETAILS]');
+    console.log(`  ├─ Vendor Payment Address : ${paymentAddress}`);
+    console.log(`  ├─ Required Token Amount  : ${paymentAmount} (${Number(paymentAmount || 0) / 1e6} USDC)`);
+    console.log(`  ├─ Approved Token Address : ${paymentToken}`);
+    console.log(`  └─ Payment Identifier     : ${paymentIdentifier}\n`);
 
-  // -------------------------------------------------------------
-  // STEP 4: Pay Corporate Bill via Chapter 2 Guardian Orchestrator
-  // -------------------------------------------------------------
-  console.log('-------------------------------------------------------------');
-  console.log(`[STEP 4] Paying Company Bill: POST /vendor/bills/${billId}/pay`);
-  console.log('-------------------------------------------------------------');
+    // -------------------------------------------------------------
+    // STEP 4: Pay Corporate Bill via Chapter 2 Guardian Orchestrator
+    // -------------------------------------------------------------
+    console.log('-------------------------------------------------------------');
+    console.log(`[STEP 4] Paying Company Bill: POST /vendor/bills/${billId}/pay`);
+    console.log('-------------------------------------------------------------');
 
-  const payRes = await fetch(`${serverUrl}/vendor/bills/${billId}/pay`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ agentAddress }),
-  });
+    const payRes = await fetch(`${serverUrl}/vendor/bills/${billId}/pay`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ agentAddress }),
+    });
 
-  if (!payRes.ok) {
-    const err = await payRes.text();
-    throw new Error(`Bill payment failed (${payRes.status}): ${err}`);
-  }
+    if (!payRes.ok) {
+      const err = await payRes.text();
+      throw new Error(`Bill payment failed (${payRes.status}): ${err}`);
+    }
 
-  const payResult: any = await payRes.json();
-  const txHash = payResult.bill?.txHash || payResult.action?.txHash;
+    const payResult: any = await payRes.json();
+    billTxHash = payResult.bill?.txHash || payResult.action?.txHash;
 
-  console.log(`[GUARDIAN VERDICT] Action ID: ${payResult.action?.id}`);
-  console.log(`  ├─ Guardian Decision      : ${payResult.decision?.decision}`);
-  console.log(`  ├─ Risk Score             : ${payResult.decision?.riskScore} / 100`);
-  console.log(`  ├─ Bill Status            : ${payResult.bill?.status}`);
-  console.log(`  ├─ Verified On-Chain Hash : ${txHash || 'Pending Relayer'}`);
-  if (txHash) {
-    console.log(`  └─ Block Explorer Link    : https://sepolia.base.org/tx/${txHash}\n`);
+    console.log(`[GUARDIAN VERDICT] Action ID: ${payResult.action?.id}`);
+    console.log(`  ├─ Guardian Decision      : ${payResult.decision?.decision}`);
+    console.log(`  ├─ Risk Score             : ${payResult.decision?.riskScore} / 100`);
+    console.log(`  ├─ Bill Status            : ${payResult.bill?.status}`);
+    console.log(`  ├─ Verified On-Chain Hash : ${billTxHash || 'Pending Relayer'}`);
+    if (billTxHash) {
+      console.log(`  └─ Block Explorer Link    : https://sepolia.base.org/tx/${billTxHash}\n`);
+    }
   }
 
   // -------------------------------------------------------------
   // STEP 5: Unlock Resource with Proof-of-Payment Header
   // -------------------------------------------------------------
-  if (txHash) {
+  if (billTxHash) {
     console.log('-------------------------------------------------------------');
     console.log('[STEP 5] Verifying Resource Access: GET /vendor/compute');
     console.log('-------------------------------------------------------------');
@@ -217,7 +220,7 @@ async function main() {
     const unlockRes = await fetch(`${serverUrl}/vendor/compute`, {
       method: 'GET',
       headers: {
-        'X-Payment-TxHash': txHash,
+        'X-Payment-TxHash': billTxHash,
       },
     });
 
@@ -233,7 +236,6 @@ async function main() {
       console.log(`  ├─ Session Token      : ${computeAccess.sessionToken}`);
       console.log(`  ├─ Allocated Specs    : ${computeAccess.details?.specs}`);
       console.log(`  ├─ Settlement Tx      : ${computeAccess.txHash}`);
-      console.log(`  └─ Payment Identifier : ${paymentIdentifier}`);
       console.log('===============================================================\n');
     }
   }

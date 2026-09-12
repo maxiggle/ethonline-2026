@@ -7,7 +7,7 @@ import 'package:chapter2/features/auth/services/auth_service.dart';
 import 'package:chapter2/core/network/api_client.dart';
 
 class MockAuthService extends AuthService {
-  MockAuthService() : super(apiClient: ApiClient(baseUrl: 'http://localhost:3000'));
+  MockAuthService() : super(apiClient: ApiClient(baseUrl: 'http://localhost:3001'));
 
   bool shouldThrow = false;
 

@@ -29,10 +29,10 @@ void main() {
     await tester.pump(const Duration(seconds: 2));
     await tester.pumpAndSettle();
 
-    expect(find.text('Continue with Google via Privy'), findsOneWidget);
+    expect(find.text('Sign In with Privy'), findsOneWidget);
   });
 
-  testWidgets('DashboardScreen renders authenticated dashboard and scenarios', (WidgetTester tester) async {
+  testWidgets('DashboardScreen renders authenticated dashboard layout and controls', (WidgetTester tester) async {
     final authCubit = AuthCubit(authService: locator<AuthService>());
     authCubit.emit(const AuthState(
       status: AuthStatus.authenticated,
@@ -61,9 +61,12 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('END-TO-END SCENARIOS'), findsOneWidget);
-    expect(find.text('Base Sepolia'), findsOneWidget);
-    expect(find.text('Autonomous Treasury Agent'), findsOneWidget);
-    expect(find.text('LIVE ACTIVITY FEED'), findsOneWidget);
+    expect(find.text('USD · Base Sepolia'), findsOneWidget);
+    expect(find.text('Mandate'), findsOneWidget);
+    expect(find.text('Clear-Sign'), findsOneWidget);
+    expect(find.text('+ Agent'), findsOneWidget);
+    expect(find.text('Supervised Agents'), findsOneWidget);
+    expect(find.text("Today's Limit"), findsOneWidget);
+    expect(find.text('Recent Activity'), findsOneWidget);
   });
 }

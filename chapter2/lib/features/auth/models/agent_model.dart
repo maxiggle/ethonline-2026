@@ -23,6 +23,8 @@ class AgentModel extends Equatable {
   final int chainId;
   final String status;
 
+  String get agentId => id;
+
   factory AgentModel.fromJson(Map<String, dynamic> json) {
     return AgentModel(
       id: json['id'] as String? ?? '',

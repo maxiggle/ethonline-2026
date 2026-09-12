@@ -47,6 +47,27 @@ class AuthCubit extends Cubit<AuthState> {
     }
   }
 
+  Future<void> checkSession() async {
+    emit(state.copyWith(status: AuthStatus.loading));
+    try {
+      final user = await _authService.checkSession();
+      if (user != null) {
+        final agents = await _authService.getAgents();
+        emit(
+          state.copyWith(
+            status: AuthStatus.authenticated,
+            user: user,
+            agents: agents,
+          ),
+        );
+      } else {
+        emit(const AuthState(status: AuthStatus.unauthenticated));
+      }
+    } catch (_) {
+      emit(const AuthState(status: AuthStatus.unauthenticated));
+    }
+  }
+
   Future<void> refreshAgents() async {
     if (!state.isAuthenticated) return;
     try {
@@ -55,8 +76,8 @@ class AuthCubit extends Cubit<AuthState> {
     } catch (_) {}
   }
 
-  void logout() {
-    _authService.logout();
+  Future<void> logout() async {
+    await _authService.logout();
     emit(const AuthState(status: AuthStatus.unauthenticated));
   }
 }

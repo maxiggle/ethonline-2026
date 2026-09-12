@@ -39,15 +39,35 @@ class AuthService {
     if (name != null) payload['name'] = name;
     if (walletAddress != null) payload['walletAddress'] = walletAddress;
 
+    _apiClient.setAuthToken(authToken);
+
     final response = await _apiClient.post(
       '/auth/login',
       data: payload,
     );
 
     final userData = response['user'] as Map<String, dynamic>;
-    _currentUser = UserIdentity.fromJson(userData);
-    _apiClient.setAuthToken(authToken);
+    final isNew = response['isNewUser'] as bool? ?? false;
+    _currentUser = UserIdentity.fromJson(userData, isNewUser: isNew);
     return _currentUser!;
+  }
+
+  /// Attempts to restore an existing authenticated session from Privy.
+  Future<UserIdentity?> checkSession() async {
+    try {
+      final session = await _privyManager.getCurrentSession();
+      if (session != null) {
+        return await loginWithPrivy(
+          session.authToken,
+          email: session.email,
+          name: session.name,
+          walletAddress: session.walletAddress,
+        );
+      }
+    } catch (_) {
+      await logout();
+    }
+    return null;
   }
 
   /// Retrieves the current authenticated user's profile and embedded wallet address.
@@ -93,8 +113,9 @@ class AuthService {
   }
 
   /// Clears the active session and authorization token.
-  void logout() {
+  Future<void> logout() async {
     _currentUser = null;
     _apiClient.setAuthToken(null);
+    await _privyManager.logout();
   }
 }

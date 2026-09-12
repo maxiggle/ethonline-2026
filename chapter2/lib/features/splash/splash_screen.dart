@@ -46,14 +46,20 @@ class _SplashScreenState extends State<SplashScreen>
   }
 
   Future<void> _checkSessionAndNavigate() async {
-    // Wait for minimum splash animation display
-    await Future.delayed(const Duration(milliseconds: 1500));
+    // Check for active Privy session concurrently with minimum splash display
+    final sessionCheck = context.read<AuthCubit>().checkSession();
+    final delay = Future.delayed(const Duration(milliseconds: 1500));
+    await Future.wait([sessionCheck, delay]);
     if (!mounted) return;
 
     final authState = context.read<AuthCubit>().state;
     if (authState.isAuthenticated) {
-      context.read<DashboardCubit>().loadDashboardMetrics();
-      context.router.replace(const DashboardRoute());
+      if (authState.isNewUser) {
+        context.router.replace(OnboardingRoute());
+      } else {
+        context.read<DashboardCubit>().loadDashboardMetrics();
+        context.router.replace(DashboardRoute());
+      }
     } else {
       context.router.replace(LoginRoute());
     }
@@ -71,7 +77,7 @@ class _SplashScreenState extends State<SplashScreen>
       listener: (context, state) {
         if (state.isAuthenticated && mounted) {
           context.read<DashboardCubit>().loadDashboardMetrics();
-          context.router.replace(const DashboardRoute());
+          context.router.replace(DashboardRoute());
         }
       },
       child: Scaffold(

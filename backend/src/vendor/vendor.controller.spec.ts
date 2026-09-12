@@ -40,7 +40,6 @@ describe('VendorController (x402 Protocol & Company Bills)', () => {
     process.env.RPC_URL = 'https://sepolia.base.org';
     process.env.SAFE_ADDRESS = '0x4f712dd78Cb1a504C69CB4f68B82Fddb6b3b1df6';
     process.env.GUARD_ADDRESS = '0x9b6023D1B6D3b076C8d999Ba406AE486750ce7d3';
-    process.env.RELAYER_PRIVATE_KEY = '0xc9cff57134e18db409627a073e83b72a1a0d3a3c0c9b1852fd533667b8b408f1';
     process.env.CHAIN_ID = '84532';
 
     const module: TestingModule = await Test.createTestingModule({

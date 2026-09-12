@@ -20,7 +20,7 @@ import { HumanBindingRow } from '../database/database.interface';
 @Injectable()
 export class WorldSelfieService {
   private readonly logger = new Logger(WorldSelfieService.name);
-  private mode: WorldVerificationMode;
+  private mode: WorldVerificationMode | 'DISABLED';
   private rpId: string;
   private action: string;
   private verifyEndpoint: string;
@@ -31,7 +31,7 @@ export class WorldSelfieService {
   private readonly nullifierToSigner = new Map<string, string>();
 
   constructor(@Optional() dbService?: DatabaseService) {
-    this.mode = (process.env.WORLD_ID_MODE as WorldVerificationMode) || 'SANDBOX';
+    this.mode = this.resolveVerificationMode(process.env.WORLD_ID_MODE);
     this.rpId = process.env.WORLD_RP_ID || DEFAULT_WORLD_RP_ID;
     this.action = process.env.WORLD_ACTION || DEFAULT_WORLD_ACTION;
     this.verifyEndpoint = process.env.WORLD_VERIFY_ENDPOINT || WORLD_VERIFY_ENDPOINT_V4;
@@ -68,9 +68,27 @@ export class WorldSelfieService {
   }
 
   /**
-   * Sets verification mode (SANDBOX vs CLOUD_API).
+   * Live verification requires WORLD_ID_MODE=CLOUD_API. Format-only SANDBOX checks are reserved for
+   * jest; any other configuration disables verification so every proof is rejected.
+   */
+  private resolveVerificationMode(configuredMode?: string): WorldVerificationMode | 'DISABLED' {
+    if (configuredMode === 'CLOUD_API') {
+      return 'CLOUD_API';
+    }
+    if (process.env.NODE_ENV === 'test') {
+      return 'SANDBOX';
+    }
+    this.logger.warn('WORLD_ID_MODE is not CLOUD_API; World ID verification is disabled');
+    return 'DISABLED';
+  }
+
+  /**
+   * Sets verification mode (SANDBOX vs CLOUD_API). SANDBOX is only permitted under test.
    */
   setMode(mode: WorldVerificationMode): void {
+    if (mode === 'SANDBOX' && process.env.NODE_ENV !== 'test') {
+      throw new Error('SANDBOX World ID verification is only permitted under test');
+    }
     this.mode = mode;
   }
 
@@ -81,6 +99,14 @@ export class WorldSelfieService {
     proof: WorldIdSelfieProof,
     expectedSignal?: string,
   ): Promise<SelfieVerificationResult> {
+    if (this.mode === 'DISABLED') {
+      return {
+        success: false,
+        humanVerified: false,
+        error: 'World ID verification is not configured on this server (WORLD_ID_MODE=CLOUD_API required)',
+      };
+    }
+
     if (!proof || !proof.nullifier_hash || !proof.merkle_root || !proof.proof) {
       return {
         success: false,

@@ -37,6 +37,39 @@ describe('WorldSelfieService', () => {
     expect(service).toBeDefined();
   });
 
+  describe('Verification Mode Configuration', () => {
+    const originalNodeEnv = process.env.NODE_ENV;
+    const originalWorldIdMode = process.env.WORLD_ID_MODE;
+
+    afterEach(() => {
+      process.env.NODE_ENV = originalNodeEnv;
+      if (originalWorldIdMode === undefined) {
+        delete process.env.WORLD_ID_MODE;
+      } else {
+        process.env.WORLD_ID_MODE = originalWorldIdMode;
+      }
+    });
+
+    it('should reject every proof when WORLD_ID_MODE is not CLOUD_API outside tests', async () => {
+      process.env.NODE_ENV = 'production';
+      process.env.WORLD_ID_MODE = 'SANDBOX';
+      const productionService = new WorldSelfieService();
+
+      const result = await productionService.verifySelfieProof(validSelfieProof, mockHumanSigner);
+
+      expect(result.success).toBe(false);
+      expect(result.humanVerified).toBe(false);
+      await expect(
+        productionService.bindHumanSigner(mockHumanSigner, validSelfieProof),
+      ).rejects.toThrow('Selfie verification failed');
+    });
+
+    it('should refuse to switch into SANDBOX mode outside tests', () => {
+      process.env.NODE_ENV = 'production';
+      expect(() => service.setMode('SANDBOX')).toThrow('only permitted under test');
+    });
+  });
+
   describe('Credential 11 Verification', () => {
     it('should verify a valid Credential 11 (Selfie Check Beta) proof in Sandbox', async () => {
       const result = await service.verifySelfieProof(validSelfieProof, mockHumanSigner);

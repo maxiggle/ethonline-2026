@@ -64,5 +64,34 @@ describe('AgentsService', () => {
       const isNotOwner = await service.verifyAgentOwnership('did:privy:charlie', agentAddress);
       expect(isNotOwner).toBe(false);
     });
+
+    it('should auto-bind real user walletAddress when user exists', async () => {
+      const userId = 'did:privy:dave_with_wallet';
+      const realWallet = '0x4444444444444444444444444444444444444444';
+      const now = new Date().toISOString();
+
+      await dbService.run(
+        'INSERT INTO "user" (id, email, name, "avatarUrl", "walletAddress", "createdAt", "updatedAt") VALUES (?, ?, ?, ?, ?, ?, ?)',
+        [userId, 'dave@example.com', 'Dave', null, realWallet, now, now],
+      );
+
+      const agents = await service.ensureDefaultAgentForUser(userId);
+      expect(agents.length).toBe(1);
+      expect(agents[0].agentAddress.toLowerCase()).toBe(realWallet.toLowerCase());
+      expect(agents[0].name).toBe('Autonomous Treasury Agent');
+    });
+
+    it('should return empty list when user has no walletAddress (zero fallback)', async () => {
+      const userId = 'did:privy:unprovisioned_user';
+      const now = new Date().toISOString();
+
+      await dbService.run(
+        'INSERT INTO "user" (id, email, name, "avatarUrl", "walletAddress", "createdAt", "updatedAt") VALUES (?, ?, ?, ?, ?, ?, ?)',
+        [userId, 'empty@example.com', 'Empty', null, null, now, now],
+      );
+
+      const agents = await service.ensureDefaultAgentForUser(userId);
+      expect(agents).toEqual([]);
+    });
   });
 });

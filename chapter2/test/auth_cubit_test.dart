@@ -33,6 +33,12 @@ class MockAuthService extends AuthService {
   ];
 
   @override
+  Future<UserIdentity> loginWithGoogle() async {
+    if (shouldThrow) throw Exception('Privy token verification failed');
+    return mockUser;
+  }
+
+  @override
   Future<UserIdentity> loginWithPrivy(String authToken, {String? email, String? name, String? walletAddress}) async {
     if (shouldThrow) throw Exception('Privy token verification failed');
     return mockUser;

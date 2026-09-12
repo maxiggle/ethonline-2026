@@ -57,7 +57,7 @@ void main() {
 
     expect(find.text('END-TO-END SCENARIOS'), findsOneWidget);
     expect(find.text('Base Sepolia'), findsOneWidget);
-    expect(find.text('Alpha Autonomous Agent'), findsOneWidget);
+    expect(find.text('Autonomous Treasury Agent'), findsOneWidget);
     expect(find.text('1. Autonomous Allow (\$40 USDC)'), findsOneWidget);
     expect(find.text('2. Human Escalation (\$850 USDC)'), findsOneWidget);
     expect(find.text('3. Threat Block (\$5,000 USDC)'), findsOneWidget);

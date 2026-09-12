@@ -40,18 +40,13 @@ class PrivyManager {
 
   Future<PrivyAuthResult> loginWithGoogle() async {
     if (!isNativeSupported) {
-      // In headless test environments or non-mobile platforms
-      return const PrivyAuthResult(
-        userId: "did:privy:google_user",
-        email: "google_user@example.com",
-        name: "Google User",
-        walletAddress: "0x1234567890123456789012345678901234567890",
-        authToken: "test_token_google_user",
+      throw UnsupportedError(
+        "Privy Google Authentication requires native iOS or Android. Please run on iOS Simulator or mobile device.",
       );
     }
 
     final p = privy;
-    await p.awaitReady();
+    await p.getAuthState();
 
     final result = await p.oAuth.login(
       provider: OAuthProvider.google,

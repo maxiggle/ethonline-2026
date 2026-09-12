@@ -34,14 +34,14 @@ class AuthService {
     String? name,
     String? walletAddress,
   }) async {
+    final payload = <String, dynamic>{'authToken': authToken};
+    if (email != null) payload['email'] = email;
+    if (name != null) payload['name'] = name;
+    if (walletAddress != null) payload['walletAddress'] = walletAddress;
+
     final response = await _apiClient.post(
       '/auth/login',
-      data: {
-        'authToken': authToken,
-        if (email != null) 'email': email,
-        if (name != null) 'name': name,
-        if (walletAddress != null) 'walletAddress': walletAddress,
-      },
+      data: payload,
     );
 
     final userData = response['user'] as Map<String, dynamic>;

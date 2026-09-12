@@ -15,16 +15,17 @@ class DashboardCubit extends Cubit<DashboardState> {
   Future<void> loadDashboardMetrics() async {
     emit(state.copyWith(status: DashboardStatus.loading));
     try {
+      final mandate = await _apiService.fetchMandate();
       final actions = await _apiService.fetchActions();
       final pendingCount = actions.where((a) => a.status == TreasuryActionStatus.pending).length;
       final blockedCount = actions.where((a) => a.status == TreasuryActionStatus.rejected).length;
 
       final metrics = TreasuryMetrics(
-        totalTreasuryBalanceUsdc: 150000.0,
-        activeAutonomousAgentsCount: 2,
-        todaySpentUsdc: 140.0,
-        dailyAutonomousCapUsdc: 500.0,
-        singleAutonomousCapUsdc: 100.0,
+        totalTreasuryBalanceUsdc: mandate.remainingDailyBudgetUsdc,
+        activeAutonomousAgentsCount: 1,
+        todaySpentUsdc: mandate.currentDailySpentUsdc,
+        dailyAutonomousCapUsdc: mandate.dailyAutonomousLimitUsdc,
+        singleAutonomousCapUsdc: mandate.maxAutonomousAmountUsdc,
         pendingEscalationsCount: pendingCount,
         blockedAttacksCount: blockedCount,
       );

@@ -312,6 +312,12 @@ class CommandCenterShell extends StatelessWidget {
   }
 
   Widget _buildAgentStatusCard(BuildContext context) {
+    final metrics = context.select((DashboardCubit c) => c.state.metrics);
+    final spent = metrics?.todaySpentUsdc ?? 0.0;
+    final cap = metrics?.dailyAutonomousCapUsdc ?? 0.0;
+    final burnPercent = cap > 0 ? (spent / cap).clamp(0.0, 1.0) : 0.0;
+    final percentDisplay = (burnPercent * 100).toStringAsFixed(0);
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -334,7 +340,7 @@ class CommandCenterShell extends StatelessWidget {
                   ),
                   SizedBox(width: 8),
                   Text(
-                    'Alpha Autonomous Agent',
+                    'Autonomous Treasury Agent',
                     style: TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.w700,
@@ -350,7 +356,7 @@ class CommandCenterShell extends StatelessWidget {
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: const Text(
-                  'ONLINE',
+                  'SUPERVISED',
                   style: TextStyle(
                     color: Chapter2Theme.neonTeal,
                     fontSize: 10,
@@ -370,17 +376,18 @@ class CommandCenterShell extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 14),
-          // Daily Budget Bar
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: const [
-              Text(
+            children: [
+              const Text(
                 'Today Autonomous Spend',
                 style: TextStyle(color: Chapter2Theme.textMuted, fontSize: 12),
               ),
               Text(
-                '\$140 / \$500 USDC (28%)',
-                style: TextStyle(
+                metrics != null
+                    ? '\${spent.toStringAsFixed(0)} / \${cap.toStringAsFixed(0)} USDC ($percentDisplay%)'
+                    : 'Connecting...',
+                style: const TextStyle(
                   color: Colors.white,
                   fontSize: 12,
                   fontWeight: FontWeight.w700,
@@ -391,11 +398,11 @@ class CommandCenterShell extends StatelessWidget {
           const SizedBox(height: 6),
           ClipRRect(
             borderRadius: BorderRadius.circular(6),
-            child: const LinearProgressIndicator(
-              value: 0.28,
+            child: LinearProgressIndicator(
+              value: metrics != null ? burnPercent : 0.0,
               minHeight: 6,
               backgroundColor: Chapter2Theme.surfaceElevated,
-              valueColor: AlwaysStoppedAnimation<Color>(Chapter2Theme.neonTeal),
+              valueColor: const AlwaysStoppedAnimation<Color>(Chapter2Theme.neonTeal),
             ),
           ),
         ],

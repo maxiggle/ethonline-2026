@@ -64,9 +64,16 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
 
     // Connect to PostgreSQL
     try {
+      const isSsl =
+        process.env.DATABASE_SSL === 'true' ||
+        databaseUrl.includes('render.com') ||
+        databaseUrl.includes('sslmode=require') ||
+        databaseUrl.includes('ssl=true');
+
       this.pgPool = new Pool({
         connectionString: databaseUrl,
-        connectionTimeoutMillis: 3000,
+        connectionTimeoutMillis: 10000,
+        ...(isSsl ? { ssl: { rejectUnauthorized: false } } : {}),
       });
       const client = await this.pgPool.connect();
       client.release();

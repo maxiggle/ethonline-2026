@@ -49,6 +49,31 @@ describe('PrivyAuthService', () => {
     it('should throw UnauthorizedException when token is invalid', async () => {
       await expect(service.verifyAuthToken('invalid_token')).rejects.toThrow(UnauthorizedException);
     });
+
+    it('should reject test tokens outside the test environment', async () => {
+      const originalNodeEnv = process.env.NODE_ENV;
+      process.env.NODE_ENV = 'production';
+      try {
+        await expect(service.verifyAuthToken('test_token_mallory')).rejects.toThrow(
+          UnauthorizedException,
+        );
+      } finally {
+        process.env.NODE_ENV = originalNodeEnv;
+      }
+    });
+
+    it('should reject unsigned JWT-shaped tokens carrying a forged identity', async () => {
+      const forgedPayload = Buffer.from(
+        JSON.stringify({
+          sub: 'did:privy:forged_admin',
+          walletAddress: '0x3333333333333333333333333333333333333333',
+        }),
+      ).toString('base64');
+
+      await expect(service.verifyAuthToken(`e30.${forgedPayload}.`)).rejects.toThrow(
+        UnauthorizedException,
+      );
+    });
   });
 
   describe('syncUser & getUser', () => {

@@ -15,7 +15,8 @@
     "test": "jest --runInBand --forceExit",
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
-    "contract:emit": "prisma contract emit"
+    "contract:emit": "prisma contract emit",
+    "prebuild": "npm run contract:emit"
   },
   "dependencies": {
     "@nestjs/common": "^10.4.15",

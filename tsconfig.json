@@ -1,9 +1,9 @@
 {
   "compilerOptions": {
     "module": "commonjs",
-    "target": "ES2021",
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM"],
     "rootDir": ".",
-    "ignoreDeprecations": "5.0",
     "skipLibCheck": true,
     "noImplicitAny": false,
     "typeRoots": [
@@ -13,6 +13,9 @@
       "node"
     ]
   },
+  "include": [
+    "scripts/**/*"
+  ],
   "exclude": [
     "backend",
     "chapter2",

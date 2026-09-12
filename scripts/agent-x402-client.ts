@@ -1,179 +1,217 @@
 /**
  * Chapter 2: Autonomous Agent x402 Payment Loop Client
  *
- * Demonstrates the complete HTTP 402 autonomous challenge and settlement flow:
- * 1. Initial Resource Access Attempt -> Receives HTTP 402 Payment Required
- * 2. Parses x402 headers (Vendor Address, Token, Amount, ChainId)
- * 3. Autonomous Proposal to Chapter 2 Guardian Orchestrator
- * 4. Guardian Policy & Cap Evaluation (Deterministic Whitelist & Cap Check)
+ * Demonstrates the complete HTTP 402 autonomous challenge, company invoice settlement,
+ * and Bazaar discovery flow:
+ * 1. x402 Bazaar Service Discovery -> Queries catalog for available endpoints
+ * 2. Enterprise Account Invoices -> Queries outstanding company invoices
+ * 3. Autonomous Bill Payment -> Dispatches payment for corporate bill with dynamic agent identity
+ * 4. Guardian Tri-Verdict Policy Check -> Evaluates Safe mandate autonomous spending limit
  * 5. On-Chain Safe Transaction Execution & Settlement via Relayer
- * 6. Access Retry with X-Payment-TxHash -> Unlocks HTTP 200 Compute Resource
+ * 6. Resource Access & Verification -> Verifies corporate receipt with X-Payment-Identifier
  */
-
-import * as path from 'path';
-import { spawn, ChildProcess } from 'child_process';
-
-const DEFAULT_SERVER_URL = process.env.API_BASE_URL || 'https://chapter2-backend.onrender.com';
-const AGENT_ADDRESS = '0x1111111111111111111111111111111111111111';
-
-async function waitForServer(url: string, timeoutMs: number = 15000): Promise<boolean> {
-  const start = Date.now();
-  while (Date.now() - start < timeoutMs) {
-    try {
-      const res = await fetch(`${url}/actions`, { signal: AbortSignal.timeout(1000) });
-      if (res.status < 500) {
-        return true;
-      }
-    } catch {}
-    await new Promise((r) => setTimeout(r, 500));
-  }
-  return false;
-}
 
 async function main() {
   console.log('\n===============================================================');
-  console.log('  CHAPTER 2: AUTONOMOUS AGENT x402 PAYMENT CLIENT DEMONSTRATION');
+  console.log('  CHAPTER 2: ENTERPRISE x402 BAZAAR & INVOICE CLIENT');
   console.log('===============================================================\n');
 
-  let serverProcess: ChildProcess | null = null;
-  let serverUrl = DEFAULT_SERVER_URL;
-
-  // Check if backend server is already reachable; if not, spin up backend process
-  let isRunning = false;
-  try {
-    const healthCheck = await fetch(`${serverUrl}/actions`, { signal: AbortSignal.timeout(1000) });
-    isRunning = healthCheck.status < 500;
-  } catch {}
-
-  if (isRunning) {
-    console.log(`[NETWORK] Connected to live Chapter 2 backend at ${serverUrl}`);
-  } else {
-    console.log(`[BOOTSTRAP] Starting Chapter 2 Orchestrator at ${serverUrl}...`);
-    const backendDir = path.resolve(__dirname, '../backend');
-    serverProcess = spawn('npx', ['nest', 'start'], {
-      cwd: backendDir,
-      stdio: ['ignore', 'pipe', 'pipe'],
-      env: { ...process.env, PORT: '3001' },
-    });
-
-    const ready = await waitForServer(serverUrl, 20000);
-    if (!ready) {
-      if (serverProcess) serverProcess.kill();
-      throw new Error(`Failed to start Chapter 2 backend on ${serverUrl}`);
-    }
-    console.log(`[BOOTSTRAP] Chapter 2 Orchestrator successfully booted on ${serverUrl}\n`);
+  const serverUrl = process.env.API_BASE_URL;
+  if (!serverUrl) {
+    console.error('[CONFIGURATION ERROR]: Missing required environment variable API_BASE_URL.');
+    console.error('Please specify API_BASE_URL explicitly without fallbacks, for example:');
+    console.error('  API_BASE_URL=https://chapter2-backend.onrender.com npx ts-node scripts/agent-x402-client.ts');
+    console.error('  or');
+    console.error('  API_BASE_URL=http://localhost:3000 npx ts-node scripts/agent-x402-client.ts\n');
+    process.exit(1);
   }
 
+  // Verify server reachability
   try {
-    // -------------------------------------------------------------
-    // STEP 1: Attempt to access protected vendor compute resource
-    // -------------------------------------------------------------
-    console.log('-------------------------------------------------------------');
-    console.log('[STEP 1] Autonomous agent requesting compute: GET /vendor/compute');
-    console.log('-------------------------------------------------------------');
-
-    const initialRes = await fetch(`${serverUrl}/vendor/compute`, {
-      method: 'GET',
-    });
-
-    console.log(`[HTTP RESPONSE] Status: ${initialRes.status} ${initialRes.statusText}`);
-
-    if (initialRes.status !== 402) {
-      throw new Error(`Expected HTTP 402 Payment Required, received: ${initialRes.status}`);
+    const healthCheck = await fetch(`${serverUrl}/actions`, { signal: AbortSignal.timeout(3000) });
+    if (healthCheck.status >= 500) {
+      throw new Error(`Server returned error status ${healthCheck.status}`);
     }
+    console.log(`[NETWORK] Connected to live Chapter 2 backend at ${serverUrl}`);
+  } catch (err) {
+    throw new Error(`Could not reach Chapter 2 backend at ${serverUrl}. Ensure the service is running. Error: ${err}`);
+  }
 
-    // -------------------------------------------------------------
-    // STEP 2: Extract and parse x402 Payment Challenge Headers
-    // -------------------------------------------------------------
-    const paymentAddress = initialRes.headers.get('x-payment-address');
-    const paymentAmount = initialRes.headers.get('x-payment-amount');
-    const paymentToken = initialRes.headers.get('x-payment-token');
-    const paymentChainId = initialRes.headers.get('x-payment-chainid');
-
-    console.log('\n[x402 CHALLENGE DETAILS]');
-    console.log(`  ├─ Vendor Payment Address : ${paymentAddress}`);
-    console.log(`  ├─ Required Token Amount  : ${paymentAmount} (${Number(paymentAmount) / 1e6} USDC)`);
-    console.log(`  ├─ Approved Token Address : ${paymentToken}`);
-    console.log(`  └─ Network Chain ID       : ${paymentChainId} (Base Sepolia)\n`);
-
-    if (!paymentAddress || !paymentAmount || !paymentToken) {
-      throw new Error('Missing required x402 payment headers from vendor response');
+  // Dynamically resolve autonomous agent identity from live on-chain Safe mandate or env
+  let agentAddress = process.env.AGENT_ADDRESS;
+  if (!agentAddress) {
+    console.log('[AGENT IDENTITY] Resolving authorized autonomous agent from active mandate...');
+    const mandateRes = await fetch(`${serverUrl}/mandates/active`);
+    if (!mandateRes.ok) {
+      throw new Error(`Failed to query active mandate from ${serverUrl}/mandates/active: ${mandateRes.status}`);
     }
-
-    // -------------------------------------------------------------
-    // STEP 3: Submit Action Proposal to Chapter 2 Guardian
-    // -------------------------------------------------------------
-    console.log('-------------------------------------------------------------');
-    console.log('[STEP 3] Proposing Treasury Action to Chapter 2 Guardian');
-    console.log('-------------------------------------------------------------');
-
-    const proposePayload = {
-      target: paymentToken,
-      value: '0',
-      data: '0x',
-      token: paymentToken,
-      recipient: paymentAddress,
-      amount: paymentAmount,
-      agentAddress: AGENT_ADDRESS,
-      justification: 'Autonomous H100 GPU compute cluster allocation via x402 protocol',
-    };
-
-    const proposeRes = await fetch(`${serverUrl}/actions/propose`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(proposePayload),
-    });
-
-    if (!proposeRes.ok) {
-      const err = await proposeRes.text();
-      throw new Error(`Action proposal failed (${proposeRes.status}): ${err}`);
+    const mandateData: any = await mandateRes.json();
+    if (!mandateData.autonomousAgent) {
+      throw new Error('No authorized autonomous agent configured in the active Safe mandate. Specify AGENT_ADDRESS in env.');
     }
+    agentAddress = mandateData.autonomousAgent as string;
+    console.log(`[AGENT IDENTITY] Dynamically bound to authorized agent from on-chain mandate: ${agentAddress}\n`);
+  } else {
+    console.log(`[AGENT IDENTITY] Using authorized agent from environment: ${agentAddress}\n`);
+  }
 
-    const proposalResult: any = await proposeRes.json();
-    const actionId = proposalResult.action.id;
-    console.log(`[GUARDIAN VERDICT] Action ID: ${actionId}`);
-    console.log(`  ├─ Guardian Decision      : ${proposalResult.decision.decision}`);
-    console.log(`  ├─ Risk Score             : ${proposalResult.decision.riskScore} / 100`);
-    console.log(`  ├─ Human Escalation Req   : ${proposalResult.decision.requiresHumanApproval}`);
-    console.log(`  └─ Decision Rationale     : ${proposalResult.decision.reasons?.join(' | ')}\n`);
+  // -------------------------------------------------------------
+  // STEP 1: Discover Services via x402 Bazaar Discovery Protocol
+  // -------------------------------------------------------------
+  console.log('-------------------------------------------------------------');
+  console.log('[STEP 1] Querying x402 Bazaar Catalog: GET /discovery/resources');
+  console.log('-------------------------------------------------------------');
 
-    // -------------------------------------------------------------
-    // STEP 4: Await On-Chain Relayer Settlement
-    // -------------------------------------------------------------
-    console.log('-------------------------------------------------------------');
-    console.log('[STEP 4] Awaiting On-Chain Relayer Settlement & txHash');
-    console.log('-------------------------------------------------------------');
+  const bazaarRes = await fetch(`${serverUrl}/discovery/resources`);
+  if (bazaarRes.ok) {
+    const bazaarData: any = await bazaarRes.json();
+    console.log(`[BAZAAR DISCOVERY] Protocol: ${bazaarData.protocol || 'x402-bazaar'} | Version: ${bazaarData.version || '0.1.0'}`);
+    const items = (bazaarData.items as any[]) || [];
+    console.log(`Discovered ${items.length} registered x402 payable endpoints:`);
+    for (const item of items) {
+      const accept = item.accepts?.[0] || {};
+      console.log(`  ├─ ${item.extensions?.bazaar?.info?.serviceName || item.resource}`);
+      console.log(`  │  Endpoint: ${item.resource} | Cost: ${Number(accept.amount || 0) / 1e6} USDC | PayTo: ${accept.payTo}`);
+      console.log(`  │  Payment-Identifier: ${accept.extra?.paymentIdentifier || 'none'}`);
+    }
+    console.log('');
+  } else {
+    console.log(`[BAZAAR DISCOVERY] Note: GET /discovery/resources returned status ${bazaarRes.status}`);
+  }
 
-    let txHash = proposalResult.action.txHash;
-    let pollCount = 0;
+  // -------------------------------------------------------------
+  // STEP 1B: Search Bazaar Services (e.g. "weather APIs")
+  // -------------------------------------------------------------
+  console.log('-------------------------------------------------------------');
+  console.log('[STEP 1B] Searching Bazaar Catalog: GET /discovery/search?query=weather%20APIs&type=http');
+  console.log('-------------------------------------------------------------');
 
-    while (!txHash && pollCount < 10) {
-      await new Promise((r) => setTimeout(r, 500));
-      const pollRes = await fetch(`${serverUrl}/actions/${actionId}`);
-      if (pollRes.ok) {
-        const polled: any = await pollRes.json();
-        if (polled.txHash) {
-          txHash = polled.txHash;
-          break;
-        }
+  const searchRes = await fetch(`${serverUrl}/discovery/search?query=weather%20APIs&type=http`);
+  if (searchRes.ok) {
+    const searchResults: any = await searchRes.json();
+    console.log(`Found ${searchResults.resources?.length || 0} services matching "weather APIs":`);
+    for (const s of (searchResults.resources || [])) {
+      const info = s.extensions?.bazaar?.info;
+      console.log(`  ├─ ${info?.serviceName} ($${Number(s.accepts?.[0]?.amount || 0) / 1e6} USDC)`);
+      console.log(`  │  Endpoint: ${s.resource} | Method: ${info?.input?.method || 'GET'}`);
+      console.log(`  │  Default Params: ${JSON.stringify(info?.input?.queryParams || {})}`);
+    }
+    if (searchResults.pagination) {
+      console.log(`  └─ Next page cursor: ${searchResults.pagination.cursor}`);
+    }
+    console.log('');
+
+    // Demonstrate calling the selected service with x402 payment
+    const selectedService = searchResults.resources?.[0];
+    if (selectedService) {
+      console.log('-------------------------------------------------------------');
+      console.log(`[STEP 1C] Invoking Selected Service: POST /discovery/call (${selectedService.extensions?.bazaar?.info?.serviceName})`);
+      console.log('-------------------------------------------------------------');
+      const input = selectedService.extensions?.bazaar?.info?.input;
+      const callRes = await fetch(`${serverUrl}/discovery/call`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          resourceUrl: selectedService.resource,
+          method: input?.method ?? 'GET',
+          params: input?.queryParams ?? { city: 'San Francisco' },
+          agentAddress,
+        }),
+      });
+
+      if (callRes.ok) {
+        const callResult: any = await callRes.json();
+        console.log(`[CALL SUCCESS] ${callResult.serviceName}`);
+        console.log(`  ├─ Cost       : $${callResult.costUsdc} USDC`);
+        console.log(`  ├─ Tx Hash    : ${callResult.txHash}`);
+        console.log(`  └─ Response   : ${JSON.stringify(callResult.data)}\n`);
       }
-      pollCount++;
     }
+  }
 
-    if (!txHash) {
-      throw new Error(`Timed out waiting for on-chain settlement for action ${actionId}`);
-    }
+  // -------------------------------------------------------------
+  // STEP 2: Query Enterprise Connected Accounts & Invoices
+  // -------------------------------------------------------------
+  console.log('-------------------------------------------------------------');
+  console.log('[STEP 2] Fetching Enterprise Company Invoices: GET /vendor/bills');
+  console.log('-------------------------------------------------------------');
 
-    console.log(`[ON-CHAIN SETTLEMENT CONFIRMED]`);
-    console.log(`  ├─ Status                 : EXECUTED`);
-    console.log(`  ├─ Verified On-Chain Hash : ${txHash}`);
+  const billsRes = await fetch(`${serverUrl}/vendor/bills`);
+  if (!billsRes.ok) {
+    throw new Error(`Failed to fetch bills from ${serverUrl}/vendor/bills: ${billsRes.status} ${billsRes.statusText}`);
+  }
+
+  const bills: any[] = await billsRes.json();
+  console.log(`Found ${bills.length} corporate bills for enterprise account:`);
+  for (const b of bills) {
+    console.log(`  ├─ [${b.status}] ${b.provider?.toUpperCase()} - ${b.invoiceNumber}: $${b.amountUsdc} USDC (${b.description})`);
+    console.log(`  │  Payment Identifier: ${b.paymentIdentifier} | Due: ${b.dueDate}`);
+  }
+  console.log('');
+
+  const targetBill = bills.find((b: any) => b.amountUsdc <= 50) || bills[0];
+  if (!targetBill) {
+    throw new Error('No corporate bills found in directory to process');
+  }
+  const billId = targetBill.id;
+
+  // -------------------------------------------------------------
+  // STEP 3: Request x402 Challenge for Bill (${targetBill.invoiceNumber})
+  // -------------------------------------------------------------
+  console.log('-------------------------------------------------------------');
+  console.log(`[STEP 3] Fetching x402 Challenge: GET /vendor/bills/${billId}`);
+  console.log('-------------------------------------------------------------');
+
+  const challengeRes = await fetch(`${serverUrl}/vendor/bills/${billId}`);
+  console.log(`[HTTP RESPONSE] Status: ${challengeRes.status} ${challengeRes.statusText}`);
+
+  const paymentAddress = challengeRes.headers.get('x-payment-address');
+  const paymentAmount = challengeRes.headers.get('x-payment-amount');
+  const paymentToken = challengeRes.headers.get('x-payment-token');
+  const paymentIdentifier = challengeRes.headers.get('x-payment-identifier');
+
+  console.log('\n[x402 CHALLENGE DETAILS]');
+  console.log(`  ├─ Vendor Payment Address : ${paymentAddress}`);
+  console.log(`  ├─ Required Token Amount  : ${paymentAmount} (${Number(paymentAmount || 0) / 1e6} USDC)`);
+  console.log(`  ├─ Approved Token Address : ${paymentToken}`);
+  console.log(`  └─ Payment Identifier     : ${paymentIdentifier}\n`);
+
+  // -------------------------------------------------------------
+  // STEP 4: Pay Corporate Bill via Chapter 2 Guardian Orchestrator
+  // -------------------------------------------------------------
+  console.log('-------------------------------------------------------------');
+  console.log(`[STEP 4] Paying Company Bill: POST /vendor/bills/${billId}/pay`);
+  console.log('-------------------------------------------------------------');
+
+  const payRes = await fetch(`${serverUrl}/vendor/bills/${billId}/pay`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ agentAddress }),
+  });
+
+  if (!payRes.ok) {
+    const err = await payRes.text();
+    throw new Error(`Bill payment failed (${payRes.status}): ${err}`);
+  }
+
+  const payResult: any = await payRes.json();
+  const txHash = payResult.bill?.txHash || payResult.action?.txHash;
+
+  console.log(`[GUARDIAN VERDICT] Action ID: ${payResult.action?.id}`);
+  console.log(`  ├─ Guardian Decision      : ${payResult.decision?.decision}`);
+  console.log(`  ├─ Risk Score             : ${payResult.decision?.riskScore} / 100`);
+  console.log(`  ├─ Bill Status            : ${payResult.bill?.status}`);
+  console.log(`  ├─ Verified On-Chain Hash : ${txHash || 'Pending Relayer'}`);
+  if (txHash) {
     console.log(`  └─ Block Explorer Link    : https://sepolia.base.org/tx/${txHash}\n`);
+  }
 
-    // -------------------------------------------------------------
-    // STEP 5: Unlock Resource with Proof-of-Payment Header
-    // -------------------------------------------------------------
+  // -------------------------------------------------------------
+  // STEP 5: Unlock Resource with Proof-of-Payment Header
+  // -------------------------------------------------------------
+  if (txHash) {
     console.log('-------------------------------------------------------------');
-    console.log('[STEP 5] Unlocking Resource: GET /vendor/compute with X-Payment-TxHash');
+    console.log('[STEP 5] Verifying Resource Access: GET /vendor/compute');
     console.log('-------------------------------------------------------------');
 
     const unlockRes = await fetch(`${serverUrl}/vendor/compute`, {
@@ -185,33 +223,23 @@ async function main() {
 
     console.log(`[HTTP RESPONSE] Status: ${unlockRes.status} ${unlockRes.statusText}`);
 
-    if (unlockRes.status !== 200) {
-      const errText = await unlockRes.text();
-      throw new Error(`Failed to unlock compute resource (${unlockRes.status}): ${errText}`);
-    }
-
-    const computeAccess: any = await unlockRes.json();
-
-    console.log('\n===============================================================');
-    console.log('  SUCCESS: COMPUTE RESOURCE UNLOCKED VIA CHAPTER 2 GUARDIAN');
-    console.log('===============================================================');
-    console.log(`  ├─ Status             : ${computeAccess.status}`);
-    console.log(`  ├─ Granted Resource   : ${computeAccess.resource}`);
-    console.log(`  ├─ Session Token      : ${computeAccess.sessionToken}`);
-    console.log(`  ├─ Allocated Hardware : ${computeAccess.details?.specs}`);
-    console.log(`  ├─ Compute Pool       : ${computeAccess.details?.cluster}`);
-    console.log(`  ├─ Valid Until        : ${computeAccess.expiresAt}`);
-    console.log(`  └─ Settlement Tx      : ${computeAccess.txHash}`);
-    console.log('===============================================================\n');
-
-  } finally {
-    if (serverProcess) {
-      serverProcess.kill('SIGTERM');
+    if (unlockRes.ok) {
+      const computeAccess: any = await unlockRes.json();
+      console.log('\n===============================================================');
+      console.log('  SUCCESS: CORPORATE BILL SETTLED & WORKLOAD UNLOCKED');
+      console.log('===============================================================');
+      console.log(`  ├─ Resource Status    : ${computeAccess.status}`);
+      console.log(`  ├─ Granted Resource   : ${computeAccess.resource}`);
+      console.log(`  ├─ Session Token      : ${computeAccess.sessionToken}`);
+      console.log(`  ├─ Allocated Specs    : ${computeAccess.details?.specs}`);
+      console.log(`  ├─ Settlement Tx      : ${computeAccess.txHash}`);
+      console.log(`  └─ Payment Identifier : ${paymentIdentifier}`);
+      console.log('===============================================================\n');
     }
   }
 }
 
 main().catch((err) => {
-  console.error('\n[FATAL DEMO ERROR]:', err);
+  console.error('\n[FATAL CLIENT ERROR]:', err);
   process.exit(1);
 });

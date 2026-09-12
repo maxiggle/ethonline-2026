@@ -22,7 +22,7 @@ import { X402Config } from './x402/x402.config';
 import { buildX402Routes } from './x402/x402.routes';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, { rawBody: true });
   app.enableCors();
   app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
 

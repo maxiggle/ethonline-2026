@@ -274,7 +274,7 @@ export class VendorService {
 
     const insertResult = await this.databaseService.run(
       'INSERT INTO x402_payment_receipts (tx_hash, resource, amount, redeemed_at) VALUES (?, ?, ?, ?) ON CONFLICT (tx_hash) DO NOTHING',
-      [lowerHash, resourceId, requirements.amount, new Date().toISOString()],
+      [lowerHash, resourceId, verifyResult.transferredAmount.toString(), new Date().toISOString()],
     );
     if (insertResult.changes === 0) {
       throw new BadRequestException(`Payment ${lowerHash} was already redeemed (concurrent replay)`);
@@ -470,9 +470,9 @@ export class VendorService {
 
   async invokeService(
     resourceUrl: string,
-    method = 'GET',
-    params?: Record<string, any>,
-    agentAddress?: string,
+    method: string | undefined,
+    params: Record<string, any> | undefined,
+    agentAddress: string,
   ): Promise<{
     status: InvokeServiceStatus;
     serviceName: string;
@@ -496,7 +496,6 @@ export class VendorService {
     const accept = service.accepts[0];
     const amountUnits = accept.amount;
     const costUsdc = Number(amountUnits) / 1e6;
-    const effectiveAgent = agentAddress || '0x4f712dd78Cb1a504C69CB4f68B82Fddb6b3b1df6';
     const isWeather = service.resource.includes('/vendor/weather');
     const isCompute = service.resource.includes('/vendor/compute');
     const finalParams = params || service.extensions.bazaar.info.input.queryParams || {};
@@ -506,7 +505,7 @@ export class VendorService {
     }
 
     this.logger.log(
-      `Invoking Bazaar service "${serviceName}" at ${service.resource} (Cost: $${costUsdc} USDC, Agent: ${effectiveAgent})`,
+      `Invoking Bazaar service "${serviceName}" at ${service.resource} (Cost: $${costUsdc} USDC, Agent: ${agentAddress})`,
     );
 
     const proposePayload: ProposeActionDto = {
@@ -516,7 +515,7 @@ export class VendorService {
       token: accept.asset,
       recipient: accept.payTo,
       amount: amountUnits,
-      agentAddress: effectiveAgent,
+      agentAddress,
       justification: `x402 Bazaar Invocation: ${serviceName} [${service.resource}]`,
     };
 

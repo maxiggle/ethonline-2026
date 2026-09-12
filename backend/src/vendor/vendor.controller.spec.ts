@@ -6,6 +6,8 @@ import { DiscoveryController } from './discovery.controller';
 import { VendorService } from './vendor.service';
 import { OnChainExecutorService } from '../blockchain/on-chain-executor.service';
 import { DatabaseModule } from '../database/database.module';
+import { DatabaseService } from '../database/database.service';
+import { randomBytes } from 'crypto';
 import { ActionsController } from '../actions/actions.controller';
 import { AgentsService } from '../agents/agents.service';
 import { GuardianDecisionType } from '../domain/guardian-decision.entity';
@@ -17,6 +19,7 @@ describe('VendorController (x402 Protocol & Company Bills)', () => {
   let controller: VendorController;
   let vendorService: VendorService;
   let onChainExecutor: { verifyTokenTransfer: jest.Mock };
+  let databaseService: DatabaseService;
 
   const agentAddress = '0x1111111111111111111111111111111111111111';
   const ownerRequest = {
@@ -101,6 +104,7 @@ describe('VendorController (x402 Protocol & Company Bills)', () => {
     controller = module.get<VendorController>(VendorController);
     vendorService = module.get<VendorService>(VendorService);
     onChainExecutor = module.get(OnChainExecutorService);
+    databaseService = module.get(DatabaseService);
   });
 
   it('should be defined', () => {
@@ -298,6 +302,20 @@ describe('VendorController (x402 Protocol & Company Bills)', () => {
       );
 
       expect(onChainExecutor.verifyTokenTransfer).toHaveBeenCalledTimes(1);
+    });
+
+    it('should record the verified transferred amount on the receipt, not the required amount', async () => {
+      const mockRes = { setHeader: jest.fn() } as unknown as Response;
+      const txHash = `0x${randomBytes(32).toString('hex')}`;
+      onChainExecutor.verifyTokenTransfer.mockResolvedValue(verifiedTransfer(45_000_000n));
+
+      await controller.getComputeResource(txHash, mockRes);
+
+      const receipt = databaseService.getOneSync<{ amount: string }>(
+        'SELECT * FROM x402_payment_receipts WHERE tx_hash = ?',
+        [txHash],
+      );
+      expect(receipt?.amount).toBe('45000000');
     });
 
     it('should reject a malformed hash without calling verification', async () => {

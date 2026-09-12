@@ -1,4 +1,4 @@
-package com.chapter2.chapter2
+package com.chapter2.app
 
 import io.flutter.embedding.android.FlutterActivity
 

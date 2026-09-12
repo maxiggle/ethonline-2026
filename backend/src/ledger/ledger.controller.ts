@@ -5,16 +5,22 @@ import {
   Body,
   HttpCode,
   HttpStatus,
+  UseGuards,
 } from '@nestjs/common';
 import { LedgerKeyRingService } from './ledger-keyring.service';
 import { SignApprovalDto } from './dto/sign-approval.dto';
 import {
   LedgerDeviceStatus,
   LedgerClearSignPrompt,
-  KeyRingSignResult,
 } from './interfaces/ledger-keyring.interface';
+import { PrivyAuthGuard } from '../auth/guards/privy-auth.guard';
 
+/**
+ * Escalated approvals must be clear-signed on the human signer's own device, so this controller
+ * deliberately exposes no endpoint that signs an approval on a caller's behalf.
+ */
 @Controller('ledger')
+@UseGuards(PrivyAuthGuard)
 export class LedgerController {
   constructor(private readonly ledgerService: LedgerKeyRingService) {}
 
@@ -33,12 +39,6 @@ export class LedgerController {
   @HttpCode(HttpStatus.OK)
   formatClearSignPrompt(@Body() dto: SignApprovalDto): LedgerClearSignPrompt {
     return this.ledgerService.formatClearSignPrompt(dto, dto.domain);
-  }
-
-  @Post('sign')
-  @HttpCode(HttpStatus.OK)
-  async signApproval(@Body() dto: SignApprovalDto): Promise<KeyRingSignResult> {
-    return this.ledgerService.signApproval(dto, dto.domain);
   }
 
   @Get('keys')

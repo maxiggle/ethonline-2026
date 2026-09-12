@@ -1,4 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { GUARDS_METADATA } from '@nestjs/common/constants';
 import { Wallet, getAddress } from 'ethers';
 import { LedgerController } from './ledger.controller';
 import { LedgerKeyRingService } from './ledger-keyring.service';
@@ -6,10 +7,10 @@ import { Eip712Service } from '../crypto/eip712.service';
 import { SignApprovalDto } from './dto/sign-approval.dto';
 import { DEFAULT_BASE_SEPOLIA_DOMAIN } from '../crypto/eip712.constants';
 import { DEFAULT_MOCK_LEDGER_KEY } from './ledger.constants';
+import { PrivyAuthGuard } from '../auth/guards/privy-auth.guard';
 
 describe('LedgerController', () => {
   let controller: LedgerController;
-  let service: LedgerKeyRingService;
   const expectedSigner = getAddress(new Wallet(DEFAULT_MOCK_LEDGER_KEY).address);
 
   const validApprovalDto: SignApprovalDto = {
@@ -29,14 +30,25 @@ describe('LedgerController', () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [LedgerController],
       providers: [LedgerKeyRingService, Eip712Service],
-    }).compile();
+    })
+      .overrideGuard(PrivyAuthGuard)
+      .useValue({ canActivate: () => true })
+      .compile();
 
     controller = module.get<LedgerController>(LedgerController);
-    service = module.get<LedgerKeyRingService>(LedgerKeyRingService);
   });
 
   it('should be defined', () => {
     expect(controller).toBeDefined();
+  });
+
+  it('should require Privy authentication on every ledger route', () => {
+    const guards = Reflect.getMetadata(GUARDS_METADATA, LedgerController);
+    expect(guards).toContain(PrivyAuthGuard);
+  });
+
+  it('should not expose a server-side approval signing endpoint', () => {
+    expect((controller as unknown as Record<string, unknown>).signApproval).toBeUndefined();
   });
 
   it('should return device status and connection telemetry', async () => {
@@ -57,13 +69,6 @@ describe('LedgerController', () => {
     expect(prompt.title).toBeDefined();
     expect(prompt.fields.some((f) => f.label === 'Transfer Amount')).toBe(true);
     expect(prompt.fields.some((f) => f.label === 'Recipient')).toBe(true);
-  });
-
-  it('should sign approval payload and return valid signature and encodedPayload', async () => {
-    const result = await controller.signApproval(validApprovalDto);
-    expect(result.signature).toMatch(/^0x[a-fA-F0-9]{130}$/);
-    expect(result.signer).toBe(expectedSigner);
-    expect(result.encodedPayload).toMatch(/^0x/);
   });
 
   it('should list keys in the key ring vault', async () => {

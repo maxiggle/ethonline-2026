@@ -28,12 +28,13 @@ export class AuthController {
       name: dto.name,
       walletAddress: dto.walletAddress,
     });
-    const syncedUser = await this.authService.syncUser(identity);
+    const { user, isNewUser } = await this.authService.syncUser(identity);
 
     return {
       success: true,
       message: 'Authenticated successfully',
-      user: syncedUser || identity,
+      user: user || identity,
+      isNewUser,
     };
   }
 

@@ -331,6 +331,18 @@ export class OnChainExecutorService {
   }
 
   /**
+   * Reads the humanSigner that the deployed Chapter2Guard accepts for escalated EIP-712 approvals.
+   */
+  async getGuardHumanSigner(): Promise<string> {
+    const guard = new Contract(
+      this.guardAddress,
+      ['function humanSigner() external view returns (address)'],
+      this.provider,
+    );
+    return getAddress(await guard.humanSigner());
+  }
+
+  /**
    * Verifies an on-chain transaction hash receipt against the real Ethereum provider.
    */
   async verifyTransaction(txHash: string): Promise<{

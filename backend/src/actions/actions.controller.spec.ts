@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { GUARDS_METADATA } from '@nestjs/common/constants';
+import { HDNodeWallet, Wallet } from 'ethers';
 import { ActionsController } from './actions.controller';
 import { ActionStoreService } from './action-store.service';
 import { PolicyEngineService } from '../policies/policy-engine.service';
@@ -9,6 +10,7 @@ import { RiskAnalysisService } from '../guardian/risk-analysis.service';
 import { Eip712Service } from '../crypto/eip712.service';
 import { LedgerKeyRingService } from '../ledger/ledger-keyring.service';
 import { WorldSelfieService } from '../world/world-selfie.service';
+import { DEFAULT_WORLD_ACTION } from '../world/world.constants';
 import { EventsGateway } from '../gateway/events.gateway';
 import { ProposeActionDto } from '../domain/dto/propose-action.dto';
 import { TreasuryActionStatus } from '../domain/treasury-action.entity';
@@ -17,26 +19,55 @@ import { Server } from 'socket.io';
 import { PrivyAuthGuard } from '../auth/guards/privy-auth.guard';
 import { AuthenticatedRequest } from '../auth/interfaces/authenticated-request.interface';
 import { AgentsService } from '../agents/agents.service';
+import { OnChainExecutorService } from '../blockchain/on-chain-executor.service';
 
 describe('ActionsController', () => {
   let controller: ActionsController;
-  let actionStore: ActionStoreService;
   let ledgerService: LedgerKeyRingService;
   let worldSelfieService: WorldSelfieService;
+  let eip712Service: Eip712Service;
   let gateway: EventsGateway;
   let mockServer: Partial<Server>;
+  let onChainExecutor: {
+    getGuardHumanSigner: jest.Mock;
+    executeAutonomousPayment: jest.Mock;
+    executeEscalatedPayment: jest.Mock;
+  };
 
   const validRecipient = '0x0000000000000000000000000000000000041c4e';
   const invalidRecipient = '0x9999999999999999999999999999999999999999';
   const validToken = '0x4f712dd78Cb1a504C69CB4f68B82Fddb6b3b1df6';
   const agentAddress = '0x1111111111111111111111111111111111111111';
-  const agentsService = { verifyAgentOwnership: jest.fn() };
+  const agentsService = { assertAgentOwnership: jest.fn() };
+
+  const buildEscalatedProposal = (justification: string): ProposeActionDto => ({
+    target: validToken,
+    value: '0',
+    data: '0x',
+    token: validToken,
+    recipient: validRecipient,
+    amount: '200000000', // $200 (ESCALATE)
+    agentAddress,
+    justification,
+  });
+
+  const signApprovalWith = async (wallet: HDNodeWallet, actionId: string): Promise<string> => {
+    const typedData = eip712Service.generateTypedData(
+      controller.getClearSignPrompt(actionId).rawApproval,
+    );
+    return wallet.signTypedData(typedData.domain, typedData.types, typedData.message);
+  };
 
   beforeEach(async () => {
     mockServer = {
       emit: jest.fn(),
     };
-    agentsService.verifyAgentOwnership.mockReset();
+    agentsService.assertAgentOwnership.mockReset();
+    onChainExecutor = {
+      getGuardHumanSigner: jest.fn(),
+      executeAutonomousPayment: jest.fn().mockResolvedValue(undefined),
+      executeEscalatedPayment: jest.fn().mockResolvedValue(undefined),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [ActionsController],
@@ -50,6 +81,7 @@ describe('ActionsController', () => {
         WorldSelfieService,
         EventsGateway,
         { provide: AgentsService, useValue: agentsService },
+        { provide: OnChainExecutorService, useValue: onChainExecutor },
       ],
     })
       .overrideGuard(PrivyAuthGuard)
@@ -57,11 +89,13 @@ describe('ActionsController', () => {
       .compile();
 
     controller = module.get<ActionsController>(ActionsController);
-    actionStore = module.get<ActionStoreService>(ActionStoreService);
     ledgerService = module.get<LedgerKeyRingService>(LedgerKeyRingService);
     worldSelfieService = module.get<WorldSelfieService>(WorldSelfieService);
+    eip712Service = module.get<Eip712Service>(Eip712Service);
     gateway = module.get<EventsGateway>(EventsGateway);
     gateway.server = mockServer as Server;
+
+    onChainExecutor.getGuardHumanSigner.mockResolvedValue(await ledgerService.getSignerAddress());
   });
 
   it('should be defined', () => {
@@ -229,17 +263,10 @@ describe('ActionsController', () => {
   });
 
   describe('approveAction & rejectAction', () => {
-    it('should approve escalated action with valid hardware signature and encode Safe payload', async () => {
-      const proposed = await controller.proposeAction({
-        target: validToken,
-        value: '0',
-        data: '0x',
-        token: validToken,
-        recipient: validRecipient,
-        amount: '200000000', // $200 (ESCALATE)
-        agentAddress,
-        justification: 'Major database server cluster upgrade',
-      });
+    it('should approve an escalated action signed by the Guard humanSigner and dispatch execution', async () => {
+      const proposed = await controller.proposeAction(
+        buildEscalatedProposal('Major database server cluster upgrade'),
+      );
 
       expect(proposed.action.status).toBe(TreasuryActionStatus.PENDING);
 
@@ -258,19 +285,14 @@ describe('ActionsController', () => {
         'action:approved',
         expect.anything(),
       );
+      expect(onChainExecutor.executeEscalatedPayment).toHaveBeenCalledWith(
+        expect.objectContaining({ id: proposed.action.id }),
+        signResult.signature,
+      );
     });
 
     it('should reject approval with invalid signature', async () => {
-      const proposed = await controller.proposeAction({
-        target: validToken,
-        value: '0',
-        data: '0x',
-        token: validToken,
-        recipient: validRecipient,
-        amount: '200000000',
-        agentAddress,
-        justification: 'Tamper test',
-      });
+      const proposed = await controller.proposeAction(buildEscalatedProposal('Tamper test'));
 
       const invalidSig =
         '0x111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111111b';
@@ -305,6 +327,68 @@ describe('ActionsController', () => {
       ).rejects.toThrow(BadRequestException);
     });
 
+    it('should refuse approvals validly signed by a wallet that is not the Guard humanSigner', async () => {
+      const proposed = await controller.proposeAction(buildEscalatedProposal('Outsider signer'));
+      const outsiderWallet = Wallet.createRandom();
+      const signature = await signApprovalWith(outsiderWallet, proposed.action.id);
+
+      await expect(
+        controller.approveAction(proposed.action.id, {
+          actionId: proposed.action.id,
+          signature,
+          signer: outsiderWallet.address,
+        }),
+      ).rejects.toThrow(ForbiddenException);
+
+      expect(controller.getAction(proposed.action.id).status).toBe(TreasuryActionStatus.PENDING);
+      expect(onChainExecutor.executeEscalatedPayment).not.toHaveBeenCalled();
+    });
+
+    it('should refuse approvals from a World ID verified operator who is not the Guard humanSigner', async () => {
+      const operatorWallet = Wallet.createRandom();
+      await worldSelfieService.bindHumanSigner(operatorWallet.address, {
+        protocol_version: '4.0',
+        merkle_root: '0x1f38b1492b4a78c187e148e6efddb55018659174be88390cb3347f89b9087c53',
+        nullifier_hash: '0x2506e0f80bc43f146522c0e9b980c6575791eb0023a1a3641bfec91436154676',
+        proof: '0xproofbytes_world_id_operator',
+        credential_type: 11,
+        action: DEFAULT_WORLD_ACTION,
+        signal: operatorWallet.address,
+      });
+      expect(await worldSelfieService.isHumanSignerVerified(operatorWallet.address)).toBe(true);
+
+      const proposed = await controller.proposeAction(buildEscalatedProposal('World ID operator'));
+      const signature = await signApprovalWith(operatorWallet, proposed.action.id);
+
+      await expect(
+        controller.approveAction(proposed.action.id, {
+          actionId: proposed.action.id,
+          signature,
+          signer: operatorWallet.address,
+        }),
+      ).rejects.toThrow(ForbiddenException);
+
+      expect(controller.getAction(proposed.action.id).status).toBe(TreasuryActionStatus.PENDING);
+    });
+
+    it('should fail closed when the Guard humanSigner cannot be read on-chain', async () => {
+      onChainExecutor.getGuardHumanSigner.mockRejectedValue(new Error('RPC unavailable'));
+      const proposed = await controller.proposeAction(buildEscalatedProposal('RPC outage'));
+      const signResult = await ledgerService.signApproval(
+        controller.getClearSignPrompt(proposed.action.id).rawApproval,
+      );
+
+      await expect(
+        controller.approveAction(proposed.action.id, {
+          actionId: proposed.action.id,
+          signature: signResult.signature,
+          signer: signResult.signer,
+        }),
+      ).rejects.toThrow('RPC unavailable');
+
+      expect(controller.getAction(proposed.action.id).status).toBe(TreasuryActionStatus.PENDING);
+    });
+
     it('should reject an escalated action and release reservation', async () => {
       const proposed = await controller.proposeAction({
         target: validToken,
@@ -335,31 +419,20 @@ describe('ActionsController', () => {
       user: { id: 'did:privy:treasury_owner', walletAddress: agentAddress },
     } as unknown as AuthenticatedRequest;
 
-    const escalatedProposal: ProposeActionDto = {
-      target: validToken,
-      value: '0',
-      data: '0x',
-      token: validToken,
-      recipient: validRecipient,
-      amount: '200000000',
-      agentAddress,
-      justification: 'Ownership check escalation',
-    };
-
     it('should require the Privy auth guard on every actions route', () => {
       const guards = Reflect.getMetadata(GUARDS_METADATA, ActionsController);
       expect(guards).toContain(PrivyAuthGuard);
     });
 
     it('should propose on behalf of an agent owned by the authenticated user', async () => {
-      agentsService.verifyAgentOwnership.mockResolvedValue(true);
+      agentsService.assertAgentOwnership.mockResolvedValue(undefined);
 
       const result = await controller.proposeActionForUser(request, {
-        ...escalatedProposal,
+        ...buildEscalatedProposal('Owned agent payment'),
         amount: '50000000',
       });
 
-      expect(agentsService.verifyAgentOwnership).toHaveBeenCalledWith(
+      expect(agentsService.assertAgentOwnership).toHaveBeenCalledWith(
         'did:privy:treasury_owner',
         agentAddress,
       );
@@ -367,17 +440,17 @@ describe('ActionsController', () => {
     });
 
     it('should refuse proposals for agents the user does not own', async () => {
-      agentsService.verifyAgentOwnership.mockResolvedValue(false);
+      agentsService.assertAgentOwnership.mockRejectedValue(new ForbiddenException());
 
-      await expect(controller.proposeActionForUser(request, escalatedProposal)).rejects.toThrow(
-        ForbiddenException,
-      );
+      await expect(
+        controller.proposeActionForUser(request, buildEscalatedProposal('Unowned agent')),
+      ).rejects.toThrow(ForbiddenException);
       expect(controller.listActions()).toHaveLength(0);
     });
 
     it('should refuse approving or rejecting actions of agents the user does not own', async () => {
-      const proposed = await controller.proposeAction(escalatedProposal);
-      agentsService.verifyAgentOwnership.mockResolvedValue(false);
+      const proposed = await controller.proposeAction(buildEscalatedProposal('Unowned approval'));
+      agentsService.assertAgentOwnership.mockRejectedValue(new ForbiddenException());
 
       const prompt = controller.getClearSignPrompt(proposed.action.id);
       const signResult = await ledgerService.signApproval(prompt.rawApproval);

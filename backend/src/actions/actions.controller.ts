@@ -10,6 +10,7 @@ import {
   BadRequestException,
   ForbiddenException,
   NotFoundException,
+  ServiceUnavailableException,
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
@@ -59,21 +60,25 @@ export class ActionsController {
     );
   }
 
-  private async assertAgentOwnership(userId: string, agentAddress: string): Promise<void> {
-    const isOwnedActiveAgent = await this.agentsService.verifyAgentOwnership(userId, agentAddress);
-    if (!isOwnedActiveAgent) {
-      throw new ForbiddenException(
-        `Agent ${agentAddress} is not an active agent owned by the authenticated user`,
-      );
-    }
-  }
-
   private async assertActionOwnership(userId: string, actionId: string): Promise<void> {
     const action = this.actionStore.getAction(actionId);
     if (!action) {
       throw new NotFoundException(`Action ${actionId} not found`);
     }
-    await this.assertAgentOwnership(userId, action.agentAddress);
+    await this.agentsService.assertAgentOwnership(userId, action.agentAddress);
+  }
+
+  /**
+   * Chapter2Guard only executes escalated approvals recovered to its on-chain humanSigner, so that
+   * address is the sole authority; approvals fail closed when it cannot be read.
+   */
+  private async resolveAuthorizedHumanSigner(): Promise<string> {
+    if (!this.onChainExecutor) {
+      throw new ServiceUnavailableException(
+        'On-chain executor is unavailable; the Chapter2Guard humanSigner cannot be resolved',
+      );
+    }
+    return this.onChainExecutor.getGuardHumanSigner();
   }
 
   @Post('propose')
@@ -82,7 +87,7 @@ export class ActionsController {
     @Req() request: AuthenticatedRequest,
     @Body() dto: ProposeActionDto,
   ): Promise<ActionResponseDto> {
-    await this.assertAgentOwnership(request.user.id, dto.agentAddress);
+    await this.agentsService.assertAgentOwnership(request.user.id, dto.agentAddress);
     return this.proposeAction(dto);
   }
 
@@ -269,17 +274,14 @@ export class ActionsController {
       throw new BadRequestException('Invalid EIP-712 approval signature');
     }
 
-    const hardwareSigner = await this.ledgerService.getSignerAddress();
-    const isHardwareSigner = normalizedSigner.toLowerCase() === hardwareSigner.toLowerCase();
-    const isWorldIdVerified = await this.worldSelfieService.isHumanSignerVerified(normalizedSigner);
-
-    if (!isHardwareSigner && !isWorldIdVerified) {
-      throw new BadRequestException(
-        `Signer ${dto.signer} is not an authorized hardware signer or verified World ID operator.`,
+    const authorizedHumanSigner = await this.resolveAuthorizedHumanSigner();
+    if (normalizedSigner !== authorizedHumanSigner) {
+      throw new ForbiddenException(
+        `Signer ${normalizedSigner} is not the humanSigner authorized by Chapter2Guard (${authorizedHumanSigner})`,
       );
     }
 
-    if (isWorldIdVerified) {
+    if (await this.worldSelfieService.isHumanSignerVerified(normalizedSigner)) {
       await this.worldSelfieService.touchActivity(normalizedSigner);
     }
 

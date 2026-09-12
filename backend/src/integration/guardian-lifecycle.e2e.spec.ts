@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { Wallet, getAddress } from 'ethers';
 import { Server } from 'socket.io';
 
@@ -15,6 +15,7 @@ import { ActionStoreService } from '../actions/action-store.service';
 import { Eip712Service } from '../crypto/eip712.service';
 import { EventsGateway } from '../gateway/events.gateway';
 import { OnChainExecutorService } from '../blockchain/on-chain-executor.service';
+import { AuthenticatedRequest } from '../auth/interfaces/authenticated-request.interface';
 
 import { TreasuryActionStatus } from '../domain/treasury-action.entity';
 import { GuardianDecisionType } from '../domain/guardian-decision.entity';
@@ -70,9 +71,20 @@ describe('Guardian Lifecycle & Tri-Verdict E2E Integration Suite', () => {
     eventsGateway = moduleRef.get<EventsGateway>(EventsGateway);
 
     eventsGateway.server = mockSocketServer as Server;
+
+    // The suite exercises the supervisory pipeline only; it must never broadcast Base Sepolia transactions
+    const onChainExecutor = moduleRef.get<OnChainExecutorService>(OnChainExecutorService);
+    jest.spyOn(onChainExecutor, 'getGuardHumanSigner').mockResolvedValue(hardwareSignerAddress);
+    jest
+      .spyOn(onChainExecutor, 'executeAutonomousPayment')
+      .mockRejectedValue(new Error('On-chain broadcasting is disabled in the e2e suite'));
+    jest
+      .spyOn(onChainExecutor, 'executeEscalatedPayment')
+      .mockRejectedValue(new Error('On-chain broadcasting is disabled in the e2e suite'));
   });
 
   afterEach(async () => {
+    jest.restoreAllMocks();
     actionStore.clear();
     await moduleRef.close();
   });
@@ -285,9 +297,12 @@ describe('Guardian Lifecycle & Tri-Verdict E2E Integration Suite', () => {
   });
 
   describe('Scenario 5: World ID Credential 11 Biometric Signer Binding & Activity Lifecycle', () => {
-    it('should bind human signer with Credential 11 selfie, verify 90-day window, and approve escalated action', async () => {
+    it('should bind the caller wallet with Credential 11 but only accept approvals from the Guard humanSigner', async () => {
       const humanWallet = Wallet.createRandom();
       const humanSigner = getAddress(humanWallet.address);
+      const humanRequest = {
+        user: { id: 'did:privy:e2e_human_operator', walletAddress: humanSigner },
+      } as unknown as AuthenticatedRequest;
 
       const validSelfieProof: WorldIdSelfieProof = {
         protocol_version: '4.0',
@@ -308,8 +323,8 @@ describe('Guardian Lifecycle & Tri-Verdict E2E Integration Suite', () => {
       expect(verifyRes.humanVerified).toBe(true);
       expect(verifyRes.credentialType).toBe(11);
 
-      // 2. Bind human signer
-      const binding = await worldController.bindHumanSigner({
+      // 2. Bind the authenticated caller's own wallet
+      const binding = await worldController.bindHumanSigner(humanRequest, {
         signerAddress: humanSigner,
         proofPayload: validSelfieProof,
       });
@@ -334,7 +349,7 @@ describe('Guardian Lifecycle & Tri-Verdict E2E Integration Suite', () => {
       });
       expect(proposed.action.status).toBe(TreasuryActionStatus.PENDING);
 
-      // 5. Human operator signs EIP-712 payload with their verified private key
+      // 5. The World ID verified operator signs the EIP-712 payload with their own key
       const prompt = actionsController.getClearSignPrompt(proposed.action.id);
       const typedData = eip712Service.generateTypedData(prompt.rawApproval);
       const signature = await humanWallet.signTypedData(
@@ -343,23 +358,27 @@ describe('Guardian Lifecycle & Tri-Verdict E2E Integration Suite', () => {
         typedData.message,
       );
 
-      // 6. Submit approval from verified World ID human
-      const approvalRes = await actionsController.approveAction(proposed.action.id, {
-        actionId: proposed.action.id,
-        signature,
-        signer: humanSigner,
-        biometricVerified: true,
-      });
+      // 6. World ID verification alone is not authority: Chapter2Guard would reject this signer on-chain
+      await expect(
+        actionsController.approveAction(proposed.action.id, {
+          actionId: proposed.action.id,
+          signature,
+          signer: humanSigner,
+          biometricVerified: true,
+        }),
+      ).rejects.toThrow(ForbiddenException);
+      expect(actionsController.getAction(proposed.action.id).status).toBe(TreasuryActionStatus.PENDING);
+      expect(balanceReservation.getTotalReservedAmount()).toBe(180000000n);
 
-      expect(approvalRes.action.status).toBe(TreasuryActionStatus.APPROVED);
-      expect(approvalRes.signer).toBe(humanSigner);
-
-      // 7. Verify anti-Sybil replay defense: Attempting to bind the same nullifier to a second signer must fail
+      // 7. Anti-Sybil replay defense: the same nullifier cannot be bound to a second wallet
       const secondSigner = getAddress(Wallet.createRandom().address);
+      const secondRequest = {
+        user: { id: 'did:privy:e2e_second_operator', walletAddress: secondSigner },
+      } as unknown as AuthenticatedRequest;
       const tamperedProof = { ...validSelfieProof, signal: secondSigner };
 
       await expect(
-        worldController.bindHumanSigner({
+        worldController.bindHumanSigner(secondRequest, {
           signerAddress: secondSigner,
           proofPayload: tamperedProof,
         }),

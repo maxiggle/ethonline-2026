@@ -1,5 +1,15 @@
 import * as dotenv from 'dotenv';
+import * as fs from 'fs';
+
+// Load local working directory .env
 dotenv.config();
+
+// Load Render Secret Files if mounted (/etc/secrets/.env or /etc/secrets/secrets.env)
+for (const secretPath of ['/etc/secrets/.env', '/etc/secrets/secrets.env']) {
+  if (fs.existsSync(secretPath)) {
+    dotenv.config({ path: secretPath });
+  }
+}
 
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';

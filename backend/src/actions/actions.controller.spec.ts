@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import { GUARDS_METADATA } from '@nestjs/common/constants';
 import { ActionsController } from './actions.controller';
 import { ActionStoreService } from './action-store.service';
 import { PolicyEngineService } from '../policies/policy-engine.service';
@@ -13,6 +14,9 @@ import { ProposeActionDto } from '../domain/dto/propose-action.dto';
 import { TreasuryActionStatus } from '../domain/treasury-action.entity';
 import { GuardianDecisionType } from '../domain/guardian-decision.entity';
 import { Server } from 'socket.io';
+import { PrivyAuthGuard } from '../auth/guards/privy-auth.guard';
+import { AuthenticatedRequest } from '../auth/interfaces/authenticated-request.interface';
+import { AgentsService } from '../agents/agents.service';
 
 describe('ActionsController', () => {
   let controller: ActionsController;
@@ -26,11 +30,13 @@ describe('ActionsController', () => {
   const invalidRecipient = '0x9999999999999999999999999999999999999999';
   const validToken = '0x4f712dd78Cb1a504C69CB4f68B82Fddb6b3b1df6';
   const agentAddress = '0x1111111111111111111111111111111111111111';
+  const agentsService = { verifyAgentOwnership: jest.fn() };
 
   beforeEach(async () => {
     mockServer = {
       emit: jest.fn(),
     };
+    agentsService.verifyAgentOwnership.mockReset();
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [ActionsController],
@@ -43,8 +49,12 @@ describe('ActionsController', () => {
         LedgerKeyRingService,
         WorldSelfieService,
         EventsGateway,
+        { provide: AgentsService, useValue: agentsService },
       ],
-    }).compile();
+    })
+      .overrideGuard(PrivyAuthGuard)
+      .useValue({ canActivate: () => true })
+      .compile();
 
     controller = module.get<ActionsController>(ActionsController);
     actionStore = module.get<ActionStoreService>(ActionStoreService);
@@ -317,6 +327,72 @@ describe('ActionsController', () => {
         'action:rejected',
         expect.anything(),
       );
+    });
+  });
+
+  describe('authenticated routes', () => {
+    const request = {
+      user: { id: 'did:privy:treasury_owner', walletAddress: agentAddress },
+    } as unknown as AuthenticatedRequest;
+
+    const escalatedProposal: ProposeActionDto = {
+      target: validToken,
+      value: '0',
+      data: '0x',
+      token: validToken,
+      recipient: validRecipient,
+      amount: '200000000',
+      agentAddress,
+      justification: 'Ownership check escalation',
+    };
+
+    it('should require the Privy auth guard on every actions route', () => {
+      const guards = Reflect.getMetadata(GUARDS_METADATA, ActionsController);
+      expect(guards).toContain(PrivyAuthGuard);
+    });
+
+    it('should propose on behalf of an agent owned by the authenticated user', async () => {
+      agentsService.verifyAgentOwnership.mockResolvedValue(true);
+
+      const result = await controller.proposeActionForUser(request, {
+        ...escalatedProposal,
+        amount: '50000000',
+      });
+
+      expect(agentsService.verifyAgentOwnership).toHaveBeenCalledWith(
+        'did:privy:treasury_owner',
+        agentAddress,
+      );
+      expect(result.decision.decision).toBe(GuardianDecisionType.ALLOW);
+    });
+
+    it('should refuse proposals for agents the user does not own', async () => {
+      agentsService.verifyAgentOwnership.mockResolvedValue(false);
+
+      await expect(controller.proposeActionForUser(request, escalatedProposal)).rejects.toThrow(
+        ForbiddenException,
+      );
+      expect(controller.listActions()).toHaveLength(0);
+    });
+
+    it('should refuse approving or rejecting actions of agents the user does not own', async () => {
+      const proposed = await controller.proposeAction(escalatedProposal);
+      agentsService.verifyAgentOwnership.mockResolvedValue(false);
+
+      const prompt = controller.getClearSignPrompt(proposed.action.id);
+      const signResult = await ledgerService.signApproval(prompt.rawApproval);
+
+      await expect(
+        controller.approveActionForUser(request, proposed.action.id, {
+          actionId: proposed.action.id,
+          signature: signResult.signature,
+          signer: signResult.signer,
+        }),
+      ).rejects.toThrow(ForbiddenException);
+      await expect(
+        controller.rejectActionForUser(request, proposed.action.id, { reason: 'Not my agent' }),
+      ).rejects.toThrow(ForbiddenException);
+      expect(controller.getAction(proposed.action.id).status).toBe(TreasuryActionStatus.PENDING);
     });
   });
 });

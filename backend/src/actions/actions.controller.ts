@@ -5,7 +5,10 @@ import {
   Body,
   Param,
   Query,
+  Req,
+  UseGuards,
   BadRequestException,
+  ForbiddenException,
   NotFoundException,
   HttpCode,
   HttpStatus,
@@ -30,8 +33,12 @@ import { TreasuryActionApprovalParams } from '../crypto/interfaces/eip712.interf
 import { LedgerClearSignPrompt } from '../ledger/interfaces/ledger-keyring.interface';
 import { OnChainExecutorService } from '../blockchain/on-chain-executor.service';
 import { Optional } from '@nestjs/common';
+import { PrivyAuthGuard } from '../auth/guards/privy-auth.guard';
+import { AuthenticatedRequest } from '../auth/interfaces/authenticated-request.interface';
+import { AgentsService } from '../agents/agents.service';
 
 @Controller('actions')
+@UseGuards(PrivyAuthGuard)
 export class ActionsController {
   constructor(
     private readonly actionStore: ActionStoreService,
@@ -42,6 +49,7 @@ export class ActionsController {
     private readonly ledgerService: LedgerKeyRingService,
     private readonly worldSelfieService: WorldSelfieService,
     private readonly eventsGateway: EventsGateway,
+    private readonly agentsService: AgentsService,
     @Optional() private readonly onChainExecutor?: OnChainExecutorService,
   ) {}
 
@@ -51,9 +59,34 @@ export class ActionsController {
     );
   }
 
+  private async assertAgentOwnership(userId: string, agentAddress: string): Promise<void> {
+    const isOwnedActiveAgent = await this.agentsService.verifyAgentOwnership(userId, agentAddress);
+    if (!isOwnedActiveAgent) {
+      throw new ForbiddenException(
+        `Agent ${agentAddress} is not an active agent owned by the authenticated user`,
+      );
+    }
+  }
+
+  private async assertActionOwnership(userId: string, actionId: string): Promise<void> {
+    const action = this.actionStore.getAction(actionId);
+    if (!action) {
+      throw new NotFoundException(`Action ${actionId} not found`);
+    }
+    await this.assertAgentOwnership(userId, action.agentAddress);
+  }
+
   @Post('propose')
   @HttpCode(HttpStatus.CREATED)
-  async proposeAction(@Body() dto: ProposeActionDto): Promise<ActionResponseDto> {
+  async proposeActionForUser(
+    @Req() request: AuthenticatedRequest,
+    @Body() dto: ProposeActionDto,
+  ): Promise<ActionResponseDto> {
+    await this.assertAgentOwnership(request.user.id, dto.agentAddress);
+    return this.proposeAction(dto);
+  }
+
+  async proposeAction(dto: ProposeActionDto): Promise<ActionResponseDto> {
     if (dto.worldIdProof) {
       const selfieResult = await this.worldSelfieService.verifySelfieProof(
         dto.worldIdProof as any,
@@ -186,9 +219,18 @@ export class ActionsController {
 
   @Post(':id/approve')
   @HttpCode(HttpStatus.OK)
-  async approveAction(
+  async approveActionForUser(
+    @Req() request: AuthenticatedRequest,
     @Param('id') id: string,
     @Body() dto: SubmitApprovalDto,
+  ) {
+    await this.assertActionOwnership(request.user.id, id);
+    return this.approveAction(id, dto);
+  }
+
+  async approveAction(
+    id: string,
+    dto: SubmitApprovalDto,
   ): Promise<{
     action: TreasuryAction;
     encodedPayload: string;
@@ -270,9 +312,18 @@ export class ActionsController {
 
   @Post(':id/reject')
   @HttpCode(HttpStatus.OK)
-  rejectAction(
+  async rejectActionForUser(
+    @Req() request: AuthenticatedRequest,
     @Param('id') id: string,
     @Body() dto?: RejectActionDto,
+  ) {
+    await this.assertActionOwnership(request.user.id, id);
+    return this.rejectAction(id, dto);
+  }
+
+  rejectAction(
+    id: string,
+    dto?: RejectActionDto,
   ): {
     action: TreasuryAction;
     rejected: boolean;

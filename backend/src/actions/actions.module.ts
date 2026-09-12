@@ -8,9 +8,11 @@ import { CryptoModule } from '../crypto/crypto.module';
 import { LedgerModule } from '../ledger/ledger.module';
 import { WorldModule } from '../world/world.module';
 import { GatewayModule } from '../gateway/gateway.module';
+import { AgentsModule } from '../agents/agents.module';
 
 @Module({
   imports: [
+    AgentsModule,
     PoliciesModule,
     ReservationsModule,
     GuardianModule,

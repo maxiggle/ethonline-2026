@@ -293,18 +293,70 @@ class _CompanyBillsScreenState extends State<CompanyBillsScreen> {
           ],
         ),
         const SizedBox(height: 12),
-        SizedBox(
-          height: 115,
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
-            itemCount: state.accounts.length,
-            separatorBuilder: (_, index) => const SizedBox(width: 12),
-            itemBuilder: (context, index) {
-              final acc = state.accounts[index];
-              return _buildAccountCard(context, acc);
-            },
+        if (state.accounts.isEmpty)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+            decoration: BoxDecoration(
+              color: AppColors.cardSurface,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: AppColors.cardBorder),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: AppColors.cardSurfacePure,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppColors.cardBorder),
+                  ),
+                  child: const Icon(
+                    Icons.cloud_off_rounded,
+                    size: 20,
+                    color: AppColors.textMuted,
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'No Enterprise Accounts Linked',
+                        style: AppTextStyles.sm(
+                          context,
+                          fontWeight: AppTextStyles.bold,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Link Google Cloud, AWS, or Alchemy billing to automate corporate x402 settlements.',
+                        style: AppTextStyles.xs(
+                          context,
+                          color: AppColors.textMuted,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          )
+        else
+          SizedBox(
+            height: 115,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: state.accounts.length,
+              separatorBuilder: (_, index) => const SizedBox(width: 12),
+              itemBuilder: (context, index) {
+                final acc = state.accounts[index];
+                return _buildAccountCard(context, acc);
+              },
+            ),
           ),
-        ),
       ],
     );
   }
@@ -333,10 +385,10 @@ class _CompanyBillsScreenState extends State<CompanyBillsScreen> {
 
     return Container(
       width: 260,
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: AppColors.cardSurfacePure,
-        borderRadius: BorderRadius.circular(20),
+        color: AppColors.cardSurface,
+        borderRadius: BorderRadius.circular(14),
         border: Border.all(color: AppColors.cardBorder),
       ),
       child: Column(
@@ -345,21 +397,15 @@ class _CompanyBillsScreenState extends State<CompanyBillsScreen> {
         children: [
           Row(
             children: [
-              Container(
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(
-                  color: iconColor.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Icon(icon, color: iconColor, size: 18),
-              ),
-              const SizedBox(width: 10),
+              Icon(icon, size: 20, color: iconColor),
+              const SizedBox(width: 8),
               Expanded(
                 child: Text(
                   acc.name,
-                  style: AppTextStyles.sm(
+                  style: AppTextStyles.xs(
                     context,
-                    fontWeight: AppTextStyles.semiBold,
+                    fontWeight: AppTextStyles.bold,
+                    color: AppColors.textPrimary,
                   ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -368,40 +414,52 @@ class _CompanyBillsScreenState extends State<CompanyBillsScreen> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                 decoration: BoxDecoration(
-                  color: AppColors.allow.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(8),
+                  color: acc.isConnected
+                      ? AppColors.allowBackground
+                      : AppColors.blockBackground,
+                  borderRadius: BorderRadius.circular(6),
                 ),
                 child: Text(
-                  'BOUND',
+                  acc.isConnected ? 'LINKED' : 'OFFLINE',
                   style: AppTextStyles.mono(
                     context,
                     fontSize: 9,
-                    color: AppColors.allow,
-                    fontWeight: FontWeight.bold,
+                    color: acc.isConnected
+                        ? AppColors.allowText
+                        : AppColors.blockText,
+                    fontWeight: AppTextStyles.bold,
                   ),
                 ),
               ),
             ],
           ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          Text(
+            acc.accountId,
+            style: AppTextStyles.mono(
+              context,
+              fontSize: 10,
+              color: AppColors.textMuted,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                acc.organization,
-                style: AppTextStyles.xs(context, color: AppColors.textMuted),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+                '${acc.projects.length} Projects',
+                style: AppTextStyles.xs(
+                  context,
+                  color: AppColors.textSecondary,
+                ),
               ),
-              const SizedBox(height: 2),
               Text(
-                acc.accountId,
+                'Safe Bound',
                 style: AppTextStyles.mono(
                   context,
                   fontSize: 10,
-                  color: Colors.white70,
+                  color: AppColors.brandPrimary,
                 ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
               ),
             ],
           ),
@@ -460,16 +518,68 @@ class _CompanyBillsScreenState extends State<CompanyBillsScreen> {
           ],
         ),
         const SizedBox(height: 14),
-        ListView.separated(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          itemCount: state.bills.length,
-          separatorBuilder: (_, index) => const SizedBox(height: 14),
-          itemBuilder: (context, index) {
-            final bill = state.bills[index];
-            return _buildBillCard(context, bill, state);
-          },
-        ),
+        if (state.bills.isEmpty)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+            decoration: BoxDecoration(
+              color: AppColors.cardSurface,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: AppColors.cardBorder),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: AppColors.cardSurfacePure,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppColors.cardBorder),
+                  ),
+                  child: const Icon(
+                    Icons.receipt_long_rounded,
+                    size: 20,
+                    color: AppColors.textMuted,
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'No Pending Invoices',
+                        style: AppTextStyles.sm(
+                          context,
+                          fontWeight: AppTextStyles.bold,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'All corporate paywalls are settled. Incoming x402 payment demands will appear here.',
+                        style: AppTextStyles.xs(
+                          context,
+                          color: AppColors.textMuted,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          )
+        else
+          ListView.separated(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: state.bills.length,
+            separatorBuilder: (_, index) => const SizedBox(height: 14),
+            itemBuilder: (context, index) {
+              final bill = state.bills[index];
+              return _buildBillCard(context, bill, state);
+            },
+          ),
       ],
     );
   }

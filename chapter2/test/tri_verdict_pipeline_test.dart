@@ -163,6 +163,21 @@ class MockE2EChapter2ApiService extends Chapter2ApiService {
       txHash: executedAction.txHash,
     );
   }
+
+  @override
+  Future<TreasuryMandate> fetchMandate() async {
+    return const TreasuryMandate(
+      maxAutonomousAmountUsdc: 100.0,
+      dailyAutonomousLimitUsdc: 500.0,
+      currentDailySpentUsdc: 0.0,
+      approvedRecipients: ['0x0000000000000000000000000000000000041c4e'],
+      approvedTokens: ['0x999'],
+      safeAddress: '0x4f712dd78Cb1a504C69CB4f68B82Fddb6b3b1df6',
+      guardAddress: '0x9b6023D1B6D3b076C8d999Ba406AE486750ce7d3',
+      totalTreasuryBalanceUsdc: 15000.0,
+      autonomousAgent: '0xAgent001',
+    );
+  }
 }
 
 void main() {

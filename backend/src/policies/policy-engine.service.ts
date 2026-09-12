@@ -32,12 +32,24 @@ export class PolicyEngineService {
 
     const chainId = process.env.CHAIN_ID ? Number(process.env.CHAIN_ID) : 84532;
 
+    // Retrieve any already registered active agent from database
+    let initialAgent = safeAddress;
+    try {
+      const agentRow = this.dbService.getOneSync<{ agentAddress: string }>(
+        'SELECT "agentAddress" FROM agent WHERE status = ? ORDER BY "createdAt" DESC LIMIT 1',
+        ['ACTIVE'],
+      );
+      if (agentRow?.agentAddress) {
+        initialAgent = agentRow.agentAddress;
+      }
+    } catch {}
+
     this.mandate = {
       chainId,
       safeAddress,
       guardAddress,
-      autonomousAgent: '0x1111111111111111111111111111111111111111',
-      humanSigner: '0x2222222222222222222222222222222222222222',
+      autonomousAgent: initialAgent,
+      humanSigner: process.env.LEDGER_SIGNER_ADDRESS || '0x4f712dd78Cb1a504C69CB4f68B82Fddb6b3b1df6',
       maxAutonomousAmount: BigInt('100000000'),
       dailyAutonomousLimit: BigInt('500000000'),
       approvedRecipients: [

@@ -12,16 +12,25 @@ class DashboardCubit extends Cubit<DashboardState> {
 
   final Chapter2ApiService _apiService;
 
+  String? _activeAgentAddress;
+
+  void setActiveAgentAddress(String? address) {
+    _activeAgentAddress = address;
+  }
+
   Future<void> loadDashboardMetrics() async {
     emit(state.copyWith(status: DashboardStatus.loading));
     try {
       final mandate = await _apiService.fetchMandate();
+      if (mandate.autonomousAgent.isNotEmpty) {
+        _activeAgentAddress = mandate.autonomousAgent;
+      }
       final actions = await _apiService.fetchActions();
       final pendingCount = actions.where((a) => a.status == TreasuryActionStatus.pending).length;
       final blockedCount = actions.where((a) => a.status == TreasuryActionStatus.rejected).length;
 
       final metrics = TreasuryMetrics(
-        totalTreasuryBalanceUsdc: mandate.remainingDailyBudgetUsdc,
+        totalTreasuryBalanceUsdc: mandate.totalTreasuryBalanceUsdc,
         activeAutonomousAgentsCount: 1,
         todaySpentUsdc: mandate.currentDailySpentUsdc,
         dailyAutonomousCapUsdc: mandate.dailyAutonomousLimitUsdc,
@@ -44,17 +53,18 @@ class DashboardCubit extends Cubit<DashboardState> {
   }
 
   /// Scenario 1: Propose $40 autonomous payment (evaluated as ALLOW, auto-executed).
-  Future<void> triggerAutonomousAllowScenario() async {
+  Future<void> triggerAutonomousAllowScenario({String? agentAddress}) async {
     emit(state.copyWith(isSubmittingScenario: true));
     try {
-      const request = ProposeActionRequest(
+      final effectiveAgent = agentAddress ?? _activeAgentAddress ?? '0x4f712dd78Cb1a504C69CB4f68B82Fddb6b3b1df6';
+      final request = ProposeActionRequest(
         target: '0x0000000000000000000000000000000000041c4e',
         value: '0',
         data: '0xa9059cbb',
         token: '0x0000000000000000000000000000000000041c4e',
         recipient: '0x0000000000000000000000000000000000041c4e',
         amount: '40',
-        agentAddress: '0x1111111111111111111111111111111111111111',
+        agentAddress: effectiveAgent,
         justification: 'Alchemy RPC node infrastructure subscription',
       );
 
@@ -80,17 +90,18 @@ class DashboardCubit extends Cubit<DashboardState> {
   }
 
   /// Scenario 2: Propose $850 budget-exceeding payment (evaluated as ESCALATE, requires Face ID).
-  Future<TreasuryAction?> triggerEscalateScenario() async {
+  Future<TreasuryAction?> triggerEscalateScenario({String? agentAddress}) async {
     emit(state.copyWith(isSubmittingScenario: true));
     try {
-      const request = ProposeActionRequest(
+      final effectiveAgent = agentAddress ?? _activeAgentAddress ?? '0x4f712dd78Cb1a504C69CB4f68B82Fddb6b3b1df6';
+      final request = ProposeActionRequest(
         target: '0x0000000000000000000000000000000000041c4e',
         value: '0',
         data: '0xa9059cbb',
         token: '0x0000000000000000000000000000000000041c4e',
         recipient: '0x0000000000000000000000000000000000041c4e',
         amount: '850',
-        agentAddress: '0x1111111111111111111111111111111111111111',
+        agentAddress: effectiveAgent,
         justification: 'Dedicated Cloud Security Cluster Annual Renewal',
       );
 
@@ -116,17 +127,18 @@ class DashboardCubit extends Cubit<DashboardState> {
   }
 
   /// Scenario 3: Propose $5,000 transfer to untrusted recipient (evaluated as BLOCK).
-  Future<void> triggerBlockThreatScenario() async {
+  Future<void> triggerBlockThreatScenario({String? agentAddress}) async {
     emit(state.copyWith(isSubmittingScenario: true));
     try {
-      const request = ProposeActionRequest(
+      final effectiveAgent = agentAddress ?? _activeAgentAddress ?? '0x4f712dd78Cb1a504C69CB4f68B82Fddb6b3b1df6';
+      final request = ProposeActionRequest(
         target: '0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef',
         value: '0',
         data: '0xa9059cbb',
         token: '0x0000000000000000000000000000000000041c4e',
         recipient: '0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef',
         amount: '5000',
-        agentAddress: '0x1111111111111111111111111111111111111111',
+        agentAddress: effectiveAgent,
         justification: 'Unauthorized fund transfer to unverified address',
       );
 

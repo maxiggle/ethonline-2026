@@ -65,7 +65,7 @@ void main() {
       expect(cubit.state.status, DashboardStatus.success);
       expect(cubit.state.metrics?.pendingEscalationsCount, 1);
       expect(cubit.state.metrics?.blockedAttacksCount, 1);
-      expect(cubit.state.metrics?.totalTreasuryBalanceUsdc, 500.0);
+      expect(cubit.state.metrics?.totalTreasuryBalanceUsdc, 10.0);
       expect(cubit.state.metrics?.dailyAutonomousCapUsdc, 500.0);
       expect(cubit.state.metrics?.singleAutonomousCapUsdc, 100.0);
     });

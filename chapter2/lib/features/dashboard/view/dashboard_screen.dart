@@ -1,10 +1,17 @@
 import 'package:auto_route/auto_route.dart';
+import 'package:chapter2/features/activity/view/activity_timeline_screen.dart';
+import 'package:chapter2/features/agents/view/add_agent_sheet.dart';
+import 'package:chapter2/features/agents/view/agent_detail_screen.dart';
 import 'package:chapter2/features/approval/cubit/approval_cubit.dart';
 import 'package:chapter2/features/approval/cubit/approval_state.dart';
 import 'package:chapter2/features/approval/models/eip712_payload.dart';
 import 'package:chapter2/features/auth/cubit/auth_cubit.dart';
 import 'package:chapter2/features/dashboard/cubit/dashboard_cubit.dart';
 import 'package:chapter2/features/dashboard/cubit/dashboard_state.dart';
+import 'package:chapter2/features/dashboard/widgets/spending_sparkline_chart.dart';
+import 'package:chapter2/features/guardian_alert/view/guardian_analysis_sheet.dart';
+import 'package:chapter2/features/mandate/view/mandate_management_sheet.dart';
+import 'package:chapter2/features/settings/view/settings_screen.dart';
 import 'package:chapter2/features/timeline/models/treasury_action.dart';
 import 'package:chapter2/router/app_router.dart';
 import 'package:chapter2/shared/theme/chapter2_theme.dart';
@@ -14,13 +21,18 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 @RoutePage()
 class DashboardScreen extends StatefulWidget {
-  const DashboardScreen({super.key});
+  const DashboardScreen({super.key, this.onNavigateToTab});
+
+  final void Function(int tabIndex)? onNavigateToTab;
 
   @override
   State<DashboardScreen> createState() => _DashboardScreenState();
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
+  int _currentTabIndex = 0;
+  String _activityFilter = 'ALL';
+
   @override
   void initState() {
     super.initState();
@@ -29,8 +41,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
     });
   }
 
+  void _switchTab(int index) {
+    if (widget.onNavigateToTab != null) {
+      widget.onNavigateToTab!(index);
+    } else {
+      setState(() => _currentTabIndex = index);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final isHosted = widget.onNavigateToTab != null;
+
     return BlocListener<DashboardCubit, DashboardState>(
       listenWhen: (prev, curr) =>
           prev.pendingEscalationAction != curr.pendingEscalationAction &&
@@ -41,495 +63,315 @@ class _DashboardScreenState extends State<DashboardScreen> {
         }
       },
       child: Scaffold(
-        backgroundColor: Chapter2Theme.background,
-        appBar: _buildAppBar(context),
-        body: RefreshIndicator(
-          color: Chapter2Theme.primaryCyan,
-          backgroundColor: Chapter2Theme.surface,
-          onRefresh: () async {
-            await context.read<DashboardCubit>().loadDashboardMetrics();
-          },
-          child: SingleChildScrollView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            padding: const EdgeInsets.symmetric(
-              horizontal: 16.0,
-              vertical: 12.0,
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _buildIdentityHeader(context),
-                const SizedBox(height: 14),
-                _buildAgentStatusCard(context),
-                const SizedBox(height: 16),
-                _buildScenarioSandbox(context),
-                const SizedBox(height: 16),
-                _buildRecentActivitySection(context),
-                const SizedBox(height: 24),
-              ],
-            ),
+        backgroundColor: AppColors.screenBackground,
+        body: isHosted
+            ? _buildHomeTab(context)
+            : IndexedStack(
+                index: _currentTabIndex,
+                children: [
+                  _buildHomeTab(context),
+                  const ActivityTimelineScreen(),
+                  const AgentDetailScreen(),
+                  SettingsScreen(
+                    onSignOut: () {
+                      context.router.replace(LoginRoute());
+                    },
+                  ),
+                ],
+              ),
+        bottomNavigationBar: isHosted ? null : _buildBottomNavigationBar(context),
+      ),
+    );
+  }
+
+  Widget _buildBottomNavigationBar(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.screenBackgroundElevated,
+        border: Border(
+          top: BorderSide(color: AppColors.actionPillBorder.withValues(alpha: 0.6)),
+        ),
+      ),
+      child: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              _buildNavItem(0, Icons.space_dashboard_rounded, 'Dashboard'),
+              _buildNavItem(1, Icons.receipt_long_rounded, 'Activity'),
+              _buildNavItem(2, Icons.smart_toy_rounded, 'Agents'),
+              _buildNavItem(3, Icons.settings_rounded, 'Settings'),
+            ],
           ),
         ),
       ),
     );
   }
 
-  PreferredSizeWidget _buildAppBar(BuildContext context) {
-    return AppBar(
-      title: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(6),
-            decoration: BoxDecoration(
-              color: Chapter2Theme.primaryCyan.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(8),
+  Widget _buildNavItem(int index, IconData icon, String label) {
+    final isSelected = _currentTabIndex == index;
+    final color = isSelected ? Colors.white : AppColors.textLightMuted;
+
+    return InkWell(
+      onTap: () => _switchTab(index),
+      borderRadius: BorderRadius.circular(16),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: isSelected
+            ? BoxDecoration(
+                color: AppColors.actionPillBackground,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: AppColors.actionPillBorder),
+              )
+            : null,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: 18,
+              color: isSelected ? AppColors.brandPrimary : color,
             ),
-            child: const Icon(
-              Icons.shield_rounded,
-              color: Chapter2Theme.primaryCyan,
-              size: 20,
-            ),
-          ),
-          const SizedBox(width: 10),
-          const Text(
-            'CHAPTER 2',
-            style: TextStyle(
-              fontWeight: FontWeight.w800,
-              letterSpacing: 1.0,
-              fontSize: 17,
-            ),
-          ),
-          const SizedBox(width: 8),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-            decoration: BoxDecoration(
-              color: Chapter2Theme.neonTeal.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: Chapter2Theme.neonTeal.withValues(alpha: 0.4),
+            if (isSelected) ...[
+              const SizedBox(width: 6),
+              Text(
+                label,
+                style: AppTextStyles.xs(
+                  context,
+                  color: Colors.white,
+                  fontWeight: AppTextStyles.bold,
+                ),
               ),
-            ),
-            child: const Text(
-              'Base Sepolia',
-              style: TextStyle(
-                color: Chapter2Theme.neonTeal,
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-        ],
+            ],
+          ],
+        ),
       ),
-      actions: [
-        IconButton(
-          tooltip: 'Refresh Treasury Status',
-          icon: const Icon(Icons.refresh_rounded, size: 22),
-          onPressed: () {
-            context.read<DashboardCubit>().loadDashboardMetrics();
-          },
-        ),
-        IconButton(
-          tooltip: 'Sign Out',
-          icon: const Icon(
-            Icons.logout_rounded,
-            size: 20,
-            color: Chapter2Theme.textMuted,
-          ),
-          onPressed: () {
-            context.read<AuthCubit>().logout();
-            context.router.replace(LoginRoute());
-          },
-        ),
-      ],
     );
   }
 
-  Widget _buildIdentityHeader(BuildContext context) {
+  Widget _buildHomeTab(BuildContext context) {
+    return SafeArea(
+      child: RefreshIndicator(
+        color: AppColors.brandPrimary,
+        backgroundColor: AppColors.cardSurfacePure,
+        onRefresh: () async {
+          await context.read<DashboardCubit>().loadDashboardMetrics();
+        },
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Top Hero Card (matching visual reference)
+              _buildTopHeroCard(context),
+              const SizedBox(height: 14),
+              // Middle Floating Charcoal Action Pill Bar
+              _buildMiddleActionPillBar(context),
+              const SizedBox(height: 14),
+              // Lower Card: Split Agent/Sparkline + Recent Activity
+              _buildLowerContentCard(context),
+              const SizedBox(height: 16),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Top Card: Light surface, user greeting, notification bell & grid, large balance, green status pill
+  Widget _buildTopHeroCard(BuildContext context) {
     final user = context.select((AuthCubit c) => c.state.user);
+    final metrics = context.select((DashboardCubit c) => c.state.metrics);
     final walletAddress = user?.walletAddress ?? '';
     final truncatedWallet = walletAddress.isNotEmpty
         ? (walletAddress.length > 12
-              ? '${walletAddress.substring(0, 6)}...${walletAddress.substring(walletAddress.length - 4)}'
-              : walletAddress)
-        : 'Connecting to wallet...';
+            ? '${walletAddress.substring(0, 6)}...${walletAddress.substring(walletAddress.length - 4)}'
+            : walletAddress)
+        : 'Connecting...';
+
+    final totalBalance = metrics?.totalTreasuryBalanceUsdc;
+    final spentToday = metrics?.todaySpentUsdc ?? 0.0;
+    final dailyCap = metrics?.dailyAutonomousCapUsdc ?? 500.0;
 
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Chapter2Theme.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Chapter2Theme.border),
+        color: AppColors.cardSurface,
+        borderRadius: BorderRadius.circular(26),
+        border: Border.all(color: AppColors.cardBorder),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Row 1: User Avatar/Handle + Notification & Grid Action Icons
           Row(
             children: [
               CircleAvatar(
                 radius: 18,
-                backgroundColor: const Color(
-                  0xFF6366F1,
-                ).withValues(alpha: 0.25),
-                child: const Icon(
-                  Icons.person_rounded,
-                  color: Color(0xFF818CF8),
-                  size: 20,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      user?.email ?? (user?.name ?? 'Authenticated Operator'),
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w700,
-                        fontSize: 15,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 2),
-                    Row(
-                      children: [
-                        Container(
-                          width: 7,
-                          height: 7,
-                          decoration: const BoxDecoration(
-                            color: Chapter2Theme.neonTeal,
-                            shape: BoxShape.circle,
-                          ),
-                        ),
-                        const SizedBox(width: 6),
-                        const Text(
-                          'Privy Biometric Signer Active',
-                          style: TextStyle(
-                            color: Chapter2Theme.neonTeal,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          const Divider(height: 1, color: Chapter2Theme.border),
-          const SizedBox(height: 12),
-          InkWell(
-            onTap: walletAddress.isNotEmpty
-                ? () {
-                    Clipboard.setData(ClipboardData(text: walletAddress));
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('Copied Privy Wallet: $walletAddress'),
-                        behavior: SnackBarBehavior.floating,
-                        duration: const Duration(seconds: 2),
-                        backgroundColor: const Color(0xFF238636),
-                      ),
-                    );
-                  }
-                : null,
-            borderRadius: BorderRadius.circular(10),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                color: Chapter2Theme.surfaceElevated,
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: Chapter2Theme.border),
-              ),
-              child: Row(
-                children: [
-                  const Icon(
-                    Icons.account_balance_wallet_outlined,
-                    color: Chapter2Theme.primaryCyan,
-                    size: 16,
-                  ),
-                  const SizedBox(width: 8),
-                  const Text(
-                    'Privy Embedded EVM:',
-                    style: TextStyle(
-                      color: Chapter2Theme.textMuted,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      truncatedWallet,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontFamily: 'Courier',
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  if (walletAddress.isNotEmpty)
-                    const Icon(
-                      Icons.copy_rounded,
-                      size: 14,
-                      color: Chapter2Theme.primaryCyan,
-                    ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildAgentStatusCard(BuildContext context) {
-    final metrics = context.select((DashboardCubit c) => c.state.metrics);
-    final spent = metrics?.todaySpentUsdc ?? 0.0;
-    final cap = metrics?.dailyAutonomousCapUsdc ?? 0.0;
-    final burnPercent = cap > 0 ? (spent / cap).clamp(0.0, 1.0) : 0.0;
-    final percentDisplay = (burnPercent * 100).toStringAsFixed(0);
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Chapter2Theme.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Chapter2Theme.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Row(
-                children: [
-                  Icon(
-                    Icons.smart_toy_outlined,
-                    color: Chapter2Theme.neonTeal,
-                    size: 18,
-                  ),
-                  SizedBox(width: 8),
-                  Text(
-                    'Autonomous Treasury Agent',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 15,
-                    ),
-                  ),
-                ],
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                decoration: BoxDecoration(
-                  color: Chapter2Theme.neonTeal.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: const Text(
-                  'SUPERVISED',
-                  style: TextStyle(
-                    color: Chapter2Theme.neonTeal,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          const Text(
-            'Safe: 0x4f71...1df6   •   Guard: 0x9b60...e7d3',
-            style: TextStyle(
-              color: Chapter2Theme.textMuted,
-              fontFamily: 'Courier',
-              fontSize: 12,
-            ),
-          ),
-          const SizedBox(height: 14),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text(
-                'Today Autonomous Spend',
-                style: TextStyle(color: Chapter2Theme.textMuted, fontSize: 12),
-              ),
-              Flexible(
+                backgroundColor: AppColors.brandPrimary.withValues(alpha: 0.15),
                 child: Text(
-                  metrics != null
-                      ? '\$${spent.toStringAsFixed(0)} / \$${cap.toStringAsFixed(0)} USDC ($percentDisplay%)'
-                      : 'Loading limit...',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 12,
+                  user?.email?.isNotEmpty == true
+                      ? user!.email!.substring(0, 2).toUpperCase()
+                      : 'OP',
+                  style: AppTextStyles.sm(
+                    context,
+                    color: AppColors.brandPrimary,
+                    fontWeight: AppTextStyles.bold,
                   ),
-                  overflow: TextOverflow.ellipsis,
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(4),
-            child: LinearProgressIndicator(
-              value: metrics != null ? burnPercent : 0.0,
-              minHeight: 6,
-              backgroundColor: Chapter2Theme.surfaceElevated,
-              valueColor: const AlwaysStoppedAnimation<Color>(
-                Chapter2Theme.neonTeal,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildScenarioSandbox(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'END-TO-END SCENARIOS',
-          style: TextStyle(
-            color: Colors.white,
-            fontSize: 13,
-            fontWeight: FontWeight.w800,
-            letterSpacing: 1.0,
-          ),
-        ),
-        const SizedBox(height: 4),
-        const Text(
-          'Test real-time tri-verdict evaluations on Base Sepolia:',
-          style: TextStyle(color: Chapter2Theme.textMuted, fontSize: 12),
-        ),
-        const SizedBox(height: 12),
-        _buildScenarioCard(
-          context,
-          title: '1. Autonomous Allow (\$40 USDC)',
-          subtitle: 'RPC subscription within \$500 limit. Auto-executes.',
-          badgeText: 'ALLOW',
-          badgeColor: Chapter2Theme.neonTeal,
-          icon: Icons.check_circle_outline_rounded,
-          buttonText: 'Trigger Autonomous Allow',
-          onTap: () {
-            context.read<DashboardCubit>().triggerAutonomousAllowScenario();
-          },
-        ),
-        const SizedBox(height: 10),
-        _buildScenarioCard(
-          context,
-          title: '2. Human Escalation (\$850 USDC)',
-          subtitle:
-              'Critical infrastructure renewal. Prompts Face ID clear-sign.',
-          badgeText: 'ESCALATE',
-          badgeColor: const Color(0xFFF59E0B),
-          icon: Icons.fingerprint_rounded,
-          buttonText: 'Trigger Escalation & Sign',
-          buttonColor: const Color(0xFFD97706),
-          onTap: () {
-            context.read<DashboardCubit>().triggerEscalateScenario();
-          },
-        ),
-        const SizedBox(height: 10),
-        _buildScenarioCard(
-          context,
-          title: '3. Threat Block (\$5,000 USDC)',
-          subtitle: 'Untrusted destination address. Blocked by AI Guardian.',
-          badgeText: 'BLOCK',
-          badgeColor: Chapter2Theme.alertRed,
-          icon: Icons.shield_outlined,
-          buttonText: 'Simulate Adversarial Threat',
-          buttonColor: const Color(0xFF991B1B),
-          onTap: () {
-            context.read<DashboardCubit>().triggerBlockThreatScenario();
-          },
-        ),
-      ],
-    );
-  }
-
-  Widget _buildScenarioCard(
-    BuildContext context, {
-    required String title,
-    required String subtitle,
-    required String badgeText,
-    required Color badgeColor,
-    required IconData icon,
-    required String buttonText,
-    Color? buttonColor,
-    required VoidCallback onTap,
-  }) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: Chapter2Theme.surface,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Chapter2Theme.border),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: badgeColor.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(icon, color: badgeColor, size: 20),
               ),
               const SizedBox(width: 10),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Flexible(
-                          child: Text(
-                            title,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w700,
-                              fontSize: 14,
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 6,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            color: badgeColor.withValues(alpha: 0.15),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text(
-                            badgeText,
-                            style: TextStyle(
-                              color: badgeColor,
-                              fontSize: 10,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                        ),
-                      ],
+                    Text(
+                      user?.email ?? 'Operator',
+                      style: AppTextStyles.md(
+                        context,
+                        color: AppColors.textPrimary,
+                        fontWeight: AppTextStyles.bold,
+                      ),
+                      overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 2),
+                    InkWell(
+                      onTap: walletAddress.isNotEmpty
+                          ? () {
+                              Clipboard.setData(ClipboardData(text: walletAddress));
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('Copied Privy EVM: $walletAddress'),
+                                  backgroundColor: AppColors.allow,
+                                  behavior: SnackBarBehavior.floating,
+                                ),
+                              );
+                            }
+                          : null,
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 6,
+                            height: 6,
+                            decoration: const BoxDecoration(
+                              color: AppColors.allow,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                          const SizedBox(width: 5),
+                          Text(
+                            truncatedWallet,
+                            style: AppTextStyles.mono(
+                              context,
+                              fontSize: 11,
+                              color: AppColors.textSecondary,
+                            ),
+                          ),
+                          if (walletAddress.isNotEmpty) ...[
+                            const SizedBox(width: 4),
+                            const Icon(Icons.copy_rounded, size: 11, color: AppColors.textMuted),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              // Top Right Icon Buttons
+              _buildTopIconButton(
+                context,
+                icon: Icons.notifications_none_rounded,
+                tooltip: 'Notifications',
+                onTap: () {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('All guardian alerts verified'),
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                },
+              ),
+              const SizedBox(width: 8),
+              _buildTopIconButton(
+                context,
+                icon: Icons.grid_view_rounded,
+                tooltip: 'System Settings',
+                onTap: () => _switchTab(3),
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
+          // Currency / Network Badge
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              color: AppColors.cardSurfacePure,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: AppColors.cardBorder),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: const BoxDecoration(
+                    color: AppColors.networkBase,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  'USD · Base Sepolia',
+                  style: AppTextStyles.xs(
+                    context,
+                    color: AppColors.textSecondary,
+                    fontWeight: AppTextStyles.semiBold,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          // Large Treasury Balance Display
+          Text(
+            totalBalance != null ? '\$${_formatCurrency(totalBalance)}' : '\$--.--',
+            style: AppTextStyles.display(
+              context,
+              color: AppColors.textPrimary,
+              fontWeight: AppTextStyles.extraBold,
+            ),
+          ),
+          const SizedBox(height: 12),
+          // Spend metric & status pill row
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Autonomous Spend Today: \$${spentToday.toStringAsFixed(2)}',
+                style: AppTextStyles.sm(context, color: AppColors.textSecondary),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: AppColors.allowBackground,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: AppColors.allowBorder),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.shield_outlined, size: 12, color: AppColors.allowText),
+                    const SizedBox(width: 4),
                     Text(
-                      subtitle,
-                      style: const TextStyle(
-                        color: Chapter2Theme.textMuted,
-                        fontSize: 11,
+                      'Daily Cap: \$${dailyCap.toStringAsFixed(0)}',
+                      style: AppTextStyles.xs(
+                        context,
+                        color: AppColors.allowText,
+                        fontWeight: AppTextStyles.bold,
                       ),
                     ),
                   ],
@@ -537,32 +379,89 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
             ],
           ),
-          const SizedBox(height: 10),
-          SizedBox(
-            height: 38,
-            child: ElevatedButton(
-              onPressed: onTap,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: (buttonColor ?? const Color(0xFF238636))
-                    .withValues(alpha: 0.25),
-                foregroundColor: buttonColor ?? Chapter2Theme.neonTeal,
-                side: BorderSide(
-                  color: (buttonColor ?? const Color(0xFF238636)).withValues(
-                    alpha: 0.5,
-                  ),
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                padding: EdgeInsets.zero,
-              ),
-              child: Text(
-                buttonText,
-                style: const TextStyle(
-                  fontWeight: FontWeight.w700,
-                  fontSize: 13,
-                ),
-              ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTopIconButton(
+    BuildContext context, {
+    required IconData icon,
+    required String tooltip,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        width: 38,
+        height: 38,
+        decoration: BoxDecoration(
+          color: AppColors.cardSurfacePure,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: AppColors.cardBorder),
+        ),
+        child: Icon(icon, size: 18, color: AppColors.textPrimary),
+      ),
+    );
+  }
+
+  /// Middle Action Bar: Floating Dark Charcoal Pill Bar with 3 actions
+  Widget _buildMiddleActionPillBar(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+      decoration: BoxDecoration(
+        color: AppColors.actionPillBackground,
+        borderRadius: BorderRadius.circular(32),
+        border: Border.all(color: AppColors.actionPillBorder, width: 1.5),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.4),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          // Action 1: Mandate ⚙
+          Expanded(
+            child: _buildActionPillButton(
+              context,
+              label: 'Mandate',
+              icon: Icons.tune_rounded,
+              onTap: () => MandateManagementSheet.show(context),
+            ),
+          ),
+          // Center Action: Clear-Sign 🛡 (Primary / highlighted)
+          Expanded(
+            child: _buildActionPillButton(
+              context,
+              label: 'Clear-Sign',
+              icon: Icons.shield_rounded,
+              isCenterPrimary: true,
+              onTap: () {
+                final pending = context.read<DashboardCubit>().state.pendingEscalationAction;
+                if (pending != null) {
+                  _showBiometricApprovalSheet(context, pending);
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('No pending escalations require clear-signing right now.'),
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                }
+              },
+            ),
+          ),
+          // Action 3: + Agent 🤖
+          Expanded(
+            child: _buildActionPillButton(
+              context,
+              label: '+ Agent',
+              icon: Icons.smart_toy_rounded,
+              onTap: () => AddAgentSheet.show(context),
             ),
           ),
         ],
@@ -570,136 +469,425 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildRecentActivitySection(BuildContext context) {
-    final actions = context.select((DashboardCubit c) => c.state.recentActions);
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+  Widget _buildActionPillButton(
+    BuildContext context, {
+    required String label,
+    required IconData icon,
+    required VoidCallback onTap,
+    bool isCenterPrimary = false,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(24),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        decoration: isCenterPrimary
+            ? BoxDecoration(
+                color: AppColors.actionPillIconBackground,
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: AppColors.actionPillBorder),
+              )
+            : null,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Text(
-              'LIVE ACTIVITY FEED',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 13,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 1.0,
-              ),
+            Icon(
+              icon,
+              size: 16,
+              color: isCenterPrimary ? AppColors.escalate : AppColors.actionPillForeground,
             ),
+            const SizedBox(width: 6),
             Text(
-              '${actions.length} events recorded',
-              style: const TextStyle(
-                color: Chapter2Theme.textMuted,
-                fontSize: 12,
+              label,
+              style: AppTextStyles.sm(
+                context,
+                color: AppColors.actionPillForeground,
+                fontWeight: isCenterPrimary ? AppTextStyles.bold : AppTextStyles.medium,
               ),
             ),
           ],
         ),
-        const SizedBox(height: 10),
-        if (actions.isEmpty)
-          Container(
-            padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
-            decoration: BoxDecoration(
-              color: Chapter2Theme.surface,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Chapter2Theme.border),
-            ),
-            alignment: Alignment.center,
-            child: const Text(
-              'No treasury activity recorded yet. Run a scenario above!',
-              style: TextStyle(color: Chapter2Theme.textMuted, fontSize: 13),
-            ),
-          )
-        else
-          ListView.separated(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            itemCount: actions.length,
-            separatorBuilder: (context, index) => const SizedBox(height: 8),
-            itemBuilder: (context, index) {
-              final action = actions[index];
-              final isAllow =
-                  action.status == TreasuryActionStatus.executed ||
-                  action.status == TreasuryActionStatus.approved;
-              final isEscalate = action.status == TreasuryActionStatus.pending;
-              final color = isAllow
-                  ? Chapter2Theme.neonTeal
-                  : (isEscalate
-                        ? const Color(0xFFF59E0B)
-                        : Chapter2Theme.alertRed);
+      ),
+    );
+  }
 
-              return Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Chapter2Theme.surface,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: Chapter2Theme.border),
-                ),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 8,
-                      height: 8,
-                      decoration: BoxDecoration(
-                        color: color,
-                        shape: BoxShape.circle,
-                      ),
+  /// Lower Card: Light surface with left Supervised Agents avatar bubble grid
+  /// and right Today's Limit Sparkline chart, followed by Recent Activity list
+  Widget _buildLowerContentCard(BuildContext context) {
+    final metrics = context.select((DashboardCubit c) => c.state.metrics);
+    final agents = context.select((AuthCubit c) => c.state.agents);
+    final actions = context.select((DashboardCubit c) => c.state.recentActions);
+
+    final spent = metrics?.todaySpentUsdc ?? 0.0;
+    final cap = metrics?.dailyAutonomousCapUsdc ?? 2000.0;
+
+    final filteredActions = _filterRecentActions(actions);
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: AppColors.cardSurfacePure,
+        borderRadius: BorderRadius.circular(26),
+        border: Border.all(color: AppColors.cardBorder),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Split section: Left Supervised Agents + Right Today's Limit Sparkline
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Left: Supervised Agents Avatar Bubbles
+              Expanded(
+                flex: 5,
+                child: InkWell(
+                  onTap: () => _switchTab(2),
+                  borderRadius: BorderRadius.circular(16),
+                  child: Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: AppColors.cardSurface,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: AppColors.cardBorder),
                     ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            action.purpose,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w600,
-                              fontSize: 13,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            'Target: ${action.recipientAddress}',
-                            style: const TextStyle(
-                              color: Chapter2Theme.textMuted,
-                              fontFamily: 'Courier',
-                              fontSize: 11,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          '\$${action.amountDisplayUsdc.toStringAsFixed(2)} USDC',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w700,
-                            fontSize: 13,
+                          'Supervised Agents',
+                          style: AppTextStyles.xs(
+                            context,
+                            color: AppColors.textSecondary,
+                            fontWeight: AppTextStyles.semiBold,
                           ),
                         ),
-                        const SizedBox(height: 2),
+                        const SizedBox(height: 10),
+                        Row(
+                          children: [
+                            _buildAgentAvatarBubble(context, '🤖', true),
+                            const SizedBox(width: 8),
+                            _buildAgentAvatarBubble(context, '⚡', true),
+                            const SizedBox(width: 8),
+                            _buildAddAgentBubble(context),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
                         Text(
-                          action.status.name.toUpperCase(),
-                          style: TextStyle(
-                            color: color,
-                            fontWeight: FontWeight.w800,
-                            fontSize: 11,
+                          '${agents.isNotEmpty ? agents.length : 1} Active · Safe Bound',
+                          style: AppTextStyles.xs(
+                            context,
+                            color: AppColors.allowText,
+                            fontWeight: AppTextStyles.bold,
                           ),
                         ),
                       ],
                     ),
-                  ],
+                  ),
                 ),
-              );
-            },
+              ),
+              const SizedBox(width: 12),
+              // Right: Today's Limit Sparkline Chart
+              Expanded(
+                flex: 6,
+                child: Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppColors.cardSurface,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: AppColors.cardBorder),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            "Today's Limit",
+                            style: AppTextStyles.xs(
+                              context,
+                              color: AppColors.textSecondary,
+                              fontWeight: AppTextStyles.semiBold,
+                            ),
+                          ),
+                          Text(
+                            '\$${spent.toStringAsFixed(0)}/\$${cap.toStringAsFixed(0)}',
+                            style: AppTextStyles.xs(
+                              context,
+                              color: AppColors.textPrimary,
+                              fontWeight: AppTextStyles.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      SpendingSparklineChart(
+                        spentAmount: spent,
+                        dailyCap: cap,
+                        height: 52,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          const Divider(height: 1, color: AppColors.cardBorder),
+          const SizedBox(height: 18),
+          // Recent Activity Header + Filter Chips
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'Recent Activity',
+                style: AppTextStyles.lg(
+                  context,
+                  color: AppColors.textPrimary,
+                  fontWeight: AppTextStyles.bold,
+                ),
+              ),
+              InkWell(
+                onTap: () => _switchTab(1),
+                borderRadius: BorderRadius.circular(8),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  child: Text(
+                    'See all',
+                    style: AppTextStyles.sm(
+                      context,
+                      color: AppColors.brandPrimary,
+                      fontWeight: AppTextStyles.semiBold,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          // Quick filter chips: All, Allowed, Escalated, Blocked
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                _buildSmallFilterChip('All', 'ALL'),
+                const SizedBox(width: 6),
+                _buildSmallFilterChip('Allowed', 'ALLOW'),
+                const SizedBox(width: 6),
+                _buildSmallFilterChip('Escalated', 'ESCALATE'),
+                const SizedBox(width: 6),
+                _buildSmallFilterChip('Blocked', 'BLOCK'),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+          // Activity list
+          if (filteredActions.isEmpty)
+            Container(
+              padding: const EdgeInsets.symmetric(vertical: 28, horizontal: 16),
+              alignment: Alignment.center,
+              child: Text(
+                'No events recorded for this filter yet.',
+                style: AppTextStyles.sm(context, color: AppColors.textMuted),
+              ),
+            )
+          else
+            ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: filteredActions.length > 5 ? 5 : filteredActions.length,
+              separatorBuilder: (context, index) => const SizedBox(height: 8),
+              itemBuilder: (context, index) {
+                final action = filteredActions[index];
+                return _buildRecentActionRow(context, action);
+              },
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAgentAvatarBubble(BuildContext context, String emoji, bool isOnline) {
+    return Stack(
+      children: [
+        CircleAvatar(
+          radius: 16,
+          backgroundColor: AppColors.cardSurfacePure,
+          child: Text(emoji, style: const TextStyle(fontSize: 14)),
+        ),
+        if (isOnline)
+          Positioned(
+            right: 0,
+            bottom: 0,
+            child: Container(
+              width: 8,
+              height: 8,
+              decoration: BoxDecoration(
+                color: AppColors.allow,
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.white, width: 1.5),
+              ),
+            ),
           ),
       ],
+    );
+  }
+
+  Widget _buildAddAgentBubble(BuildContext context) {
+    return InkWell(
+      onTap: () => AddAgentSheet.show(context),
+      borderRadius: BorderRadius.circular(16),
+      child: CircleAvatar(
+        radius: 16,
+        backgroundColor: AppColors.cardSurfacePure,
+        child: const Icon(Icons.add_rounded, size: 16, color: AppColors.textSecondary),
+      ),
+    );
+  }
+
+  Widget _buildSmallFilterChip(String label, String code) {
+    final isSelected = _activityFilter == code;
+    return InkWell(
+      onTap: () => setState(() => _activityFilter = code),
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        decoration: BoxDecoration(
+          color: isSelected ? AppColors.actionPillBackground : AppColors.cardSurface,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isSelected ? AppColors.actionPillBackground : AppColors.cardBorder,
+          ),
+        ),
+        child: Text(
+          label,
+          style: AppTextStyles.xs(
+            context,
+            color: isSelected ? Colors.white : AppColors.textSecondary,
+            fontWeight: isSelected ? AppTextStyles.bold : AppTextStyles.medium,
+          ),
+        ),
+      ),
+    );
+  }
+
+  List<TreasuryAction> _filterRecentActions(List<TreasuryAction> actions) {
+    if (_activityFilter == 'ALL') return actions;
+    if (_activityFilter == 'ALLOW') {
+      return actions.where((a) =>
+          a.status == TreasuryActionStatus.executed ||
+          a.status == TreasuryActionStatus.approved).toList();
+    }
+    if (_activityFilter == 'ESCALATE') {
+      return actions.where((a) => a.status == TreasuryActionStatus.pending).toList();
+    }
+    if (_activityFilter == 'BLOCK') {
+      return actions.where((a) => a.status == TreasuryActionStatus.rejected).toList();
+    }
+    return actions;
+  }
+
+  Widget _buildRecentActionRow(BuildContext context, TreasuryAction action) {
+    final isAllow = action.status == TreasuryActionStatus.executed ||
+        action.status == TreasuryActionStatus.approved;
+    final isEscalate = action.status == TreasuryActionStatus.pending;
+
+    final badgeColor = isAllow
+        ? AppColors.allow
+        : (isEscalate ? AppColors.escalate : AppColors.block);
+    final badgeBg = isAllow
+        ? AppColors.allowBackground
+        : (isEscalate ? AppColors.escalateBackground : AppColors.blockBackground);
+    final badgeText = isAllow
+        ? AppColors.allowText
+        : (isEscalate ? AppColors.escalateText : AppColors.blockText);
+    final badgeLabel = isAllow
+        ? 'ALLOW'
+        : (isEscalate ? 'ESCALATE' : 'BLOCK');
+
+    return InkWell(
+      onTap: () => GuardianAnalysisSheet.show(context, action),
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: AppColors.cardSurface,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: AppColors.cardBorder),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              decoration: BoxDecoration(
+                color: AppColors.cardSurfacePure,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(
+                isAllow
+                    ? Icons.arrow_outward_rounded
+                    : (isEscalate ? Icons.fingerprint_rounded : Icons.shield_rounded),
+                size: 18,
+                color: badgeColor,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    action.purpose.isNotEmpty ? action.purpose : 'Autonomous Transfer',
+                    style: AppTextStyles.sm(
+                      context,
+                      color: AppColors.textPrimary,
+                      fontWeight: AppTextStyles.semiBold,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    '${action.agentAddress.isNotEmpty ? (action.agentAddress.length > 10 ? '${action.agentAddress.substring(0, 6)}...' : action.agentAddress) : "Agent #1"} · ${_formatTime(action.timestamp)}',
+                    style: AppTextStyles.xs(context, color: AppColors.textMuted),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  '-\$${action.amountDisplayUsdc.toStringAsFixed(2)}',
+                  style: AppTextStyles.sm(
+                    context,
+                    color: AppColors.textPrimary,
+                    fontWeight: AppTextStyles.bold,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: badgeBg,
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: badgeColor.withValues(alpha: 0.3)),
+                  ),
+                  child: Text(
+                    badgeLabel,
+                    style: AppTextStyles.xs(
+                      context,
+                      color: badgeText,
+                      fontWeight: AppTextStyles.bold,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -728,10 +916,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Chapter2Theme.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
+      backgroundColor: Colors.transparent,
       builder: (sheetContext) {
         return BlocConsumer<ApprovalCubit, ApprovalState>(
           listener: (context, state) {
@@ -743,8 +928,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 SnackBar(
                   content: Text(
                     'Escalation approved & executed on Base Sepolia: ${state.txHash ?? ""}',
+                    style: AppTextStyles.sm(this.context, color: Colors.white),
                   ),
-                  backgroundColor: const Color(0xFF238636),
+                  backgroundColor: AppColors.allow,
+                  behavior: SnackBarBehavior.floating,
                 ),
               );
             } else if (state.status == ApprovalStepStatus.failure) {
@@ -752,8 +939,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 SnackBar(
                   content: Text(
                     'Approval failed: ${state.errorMessage ?? "Unknown error"}',
+                    style: AppTextStyles.sm(this.context, color: Colors.white),
                   ),
-                  backgroundColor: Chapter2Theme.alertRed,
+                  backgroundColor: AppColors.block,
+                  behavior: SnackBarBehavior.floating,
                 ),
               );
             }
@@ -761,69 +950,97 @@ class _DashboardScreenState extends State<DashboardScreen> {
           builder: (context, state) {
             final isSigning = state.status == ApprovalStepStatus.signing;
 
-            return Padding(
+            return Container(
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
+              decoration: const BoxDecoration(
+                color: AppColors.cardSurfacePure,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+              ),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Center(
                     child: Container(
-                      width: 40,
+                      width: 44,
                       height: 4,
                       decoration: BoxDecoration(
-                        color: Chapter2Theme.border,
+                        color: AppColors.cardBorder,
                         borderRadius: BorderRadius.circular(2),
                       ),
                     ),
                   ),
                   const SizedBox(height: 18),
-                  const Row(
+                  Row(
                     children: [
-                      Icon(
-                        Icons.fingerprint_rounded,
-                        color: Color(0xFFF59E0B),
-                        size: 24,
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: AppColors.escalateBackground,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: AppColors.escalateBorder),
+                        ),
+                        child: const Icon(
+                          Icons.fingerprint_rounded,
+                          color: AppColors.escalate,
+                          size: 24,
+                        ),
                       ),
-                      SizedBox(width: 10),
-                      Text(
-                        'Biometric Clear-Signing Request',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 17,
-                          fontWeight: FontWeight.w800,
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Biometric Clear-Signing Request',
+                              style: AppTextStyles.xl(context),
+                            ),
+                            Text(
+                              'Exceeds single-action autonomous threshold',
+                              style: AppTextStyles.xs(
+                                context,
+                                color: AppColors.escalateText,
+                                fontWeight: AppTextStyles.bold,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 14),
+                  const SizedBox(height: 16),
                   Container(
                     padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
-                      color: Chapter2Theme.surfaceElevated,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Chapter2Theme.border),
+                      color: AppColors.cardSurface,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: AppColors.cardBorder),
                     ),
                     child: Column(
                       children: [
                         _buildSheetRow(
+                          context,
                           'Amount',
                           '\$${action.amountDisplayUsdc.toStringAsFixed(2)} USDC',
                           isBold: true,
                         ),
-                        const SizedBox(height: 8),
-                        _buildSheetRow('Purpose', action.purpose),
-                        const SizedBox(height: 8),
+                        const Divider(height: 14, color: AppColors.cardBorder),
+                        _buildSheetRow(context, 'Purpose', action.purpose),
+                        const Divider(height: 14, color: AppColors.cardBorder),
                         _buildSheetRow(
+                          context,
                           'Destination',
                           action.recipientAddress,
                           isCourier: true,
                         ),
-                        const SizedBox(height: 8),
-                        _buildSheetRow(
-                          'Safe Nonce',
-                          (action.nonce ?? 0).toString(),
-                        ),
+                        if (action.nonce != null) ...[
+                          const Divider(height: 14, color: AppColors.cardBorder),
+                          _buildSheetRow(
+                            context,
+                            'Safe Nonce',
+                            '#${action.nonce}',
+                          ),
+                        ],
                       ],
                     ),
                   ),
@@ -841,12 +1058,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 );
                           },
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFF59E0B),
-                      foregroundColor: Colors.black,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      backgroundColor: AppColors.actionPillBackground,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(16),
                       ),
+                      elevation: 0,
                     ),
                     child: isSigning
                         ? const SizedBox(
@@ -855,16 +1073,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             child: CircularProgressIndicator(
                               strokeWidth: 2,
                               valueColor: AlwaysStoppedAnimation<Color>(
-                                Colors.black,
+                                Colors.white,
                               ),
                             ),
                           )
-                        : const Text(
-                            'Authorize with Face ID / Keyring',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w800,
-                              fontSize: 15,
-                            ),
+                        : Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Icon(Icons.fingerprint_rounded, size: 20),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Authorize with Face ID / Keyring',
+                                style: AppTextStyles.md(
+                                  context,
+                                  color: Colors.white,
+                                  fontWeight: AppTextStyles.bold,
+                                ),
+                              ),
+                            ],
                           ),
                   ),
                 ],
@@ -877,6 +1103,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildSheetRow(
+    BuildContext context,
     String label,
     String value, {
     bool isBold = false,
@@ -887,21 +1114,37 @@ class _DashboardScreenState extends State<DashboardScreen> {
       children: [
         Text(
           label,
-          style: const TextStyle(color: Chapter2Theme.textMuted, fontSize: 12),
+          style: AppTextStyles.sm(context, color: AppColors.textSecondary),
         ),
         Flexible(
           child: Text(
             value,
-            style: TextStyle(
-              color: Colors.white,
-              fontWeight: isBold ? FontWeight.w800 : FontWeight.w500,
-              fontFamily: isCourier ? 'Courier' : null,
-              fontSize: 12,
-            ),
+            style: isCourier
+                ? AppTextStyles.mono(context, fontSize: 11)
+                : AppTextStyles.sm(
+                    context,
+                    color: AppColors.textPrimary,
+                    fontWeight: isBold ? AppTextStyles.bold : AppTextStyles.medium,
+                  ),
             overflow: TextOverflow.ellipsis,
           ),
         ),
       ],
     );
+  }
+
+  String _formatCurrency(double amount) {
+    final parts = amount.toStringAsFixed(2).split('.');
+    final integerPart = parts[0].replaceAllMapped(
+      RegExp(r'(\d{1,3})(?=(\d{3})+(?!\d))'),
+      (Match m) => '${m[1]},',
+    );
+    return '$integerPart.${parts[1]}';
+  }
+
+  String _formatTime(DateTime time) {
+    final hour = time.hour.toString().padLeft(2, '0');
+    final minute = time.minute.toString().padLeft(2, '0');
+    return '$hour:$minute';
   }
 }

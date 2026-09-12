@@ -154,7 +154,7 @@ async function main() {
     throw new Error(`Failed to fetch bills from ${serverUrl}/vendor/bills: ${billsRes.status} ${billsRes.statusText}`);
   }
 
-  const bills: any[] = await billsRes.json();
+  const bills = (await billsRes.json()) as any[];
   console.log(`Found ${bills.length} corporate bills for enterprise account:`);
   for (const b of bills) {
     console.log(`  ├─ [${b.status}] ${b.provider?.toUpperCase()} - ${b.invoiceNumber}: $${b.amountUsdc} USDC (${b.description})`);

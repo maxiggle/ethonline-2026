@@ -264,11 +264,11 @@ The backend orchestrator monitors the agent's intent before transactions reach t
 
 The mobile command center provides an institutional cockpit where human supervisors configure, monitor, and deploy agents without touching low-level terminal scripts:
 
-1. **Agent Setup & Cap Assignment Screen (`mandate_screen.dart`)**:
-   - Supervisor navigates to the **Mandate Configuration** tab.
+1. **Agent Setup & Cap Assignment Screen (`onboarding_screen.dart` & `mandate_management_sheet.dart`)**:
+   - During user onboarding (Step 2: Create Treasury Agent), the app retrieves the user's live **Privy Embedded EVM Wallet** (`user.walletAddress`) backed by secure enclaves.
    - Enters agent parameters:
-     - **Agent Label**: "Alchemy & Infrastructure Operator"
-     - **Agent Ethereum Address**: `0x1111111111111111111111111111111111111111`
+     - **Agent Label**: "Autonomous Treasury Agent" (customizable)
+     - **Agent Ethereum Address**: Dynamically provisioned by Privy (e.g., `0x42AbC...`)
      - **Single Autonomous Limit**: `$100.00 USDC`
      - **Daily Autonomous Budget**: `$500.00 USDC`
      - **Whitelisted Recipient**: `0x0000000000000000000000000000000000041c4e`
@@ -281,7 +281,7 @@ The mobile command center provides an institutional cockpit where human supervis
      ```
      [Ledger Stax / Flex Display]
      Review Mandate Update:
-     Agent: 0x1111...1111
+     Agent: 0x42Ab...cDeF
      Single Cap: 100 USDC
      Daily Cap: 500 USDC
      Recipient: 0x0000...41c4e
@@ -300,49 +300,40 @@ The mobile command center provides an institutional cockpit where human supervis
 
 Here is the exact procedure to deploy an agent and assign its cap during live system operation:
 
-#### Step 1: Generate Agent Keypair
+#### Step 1: User Sign-In & Privy Embedded Wallet Provisioning
 ```bash
-# Autonomous agent runtime generates its execution key
-AGENT_ADDRESS="0x1111111111111111111111111111111111111111"
+# Upon Privy login (OAuth / Email), Privy SDK provisions an EVM embedded wallet
+PRIVY_WALLET_ADDRESS="0x42AbCdEf01234567890123456789012345678901"
 ```
 
-#### Step 2: Configure On-Chain Guard via Safe
-```solidity
-// Safe executes transaction to Chapter2Guard
-Chapter2Guard guard = Chapter2Guard(0x9b6023D1B6D3b076C8d999Ba406AE486750ce7d3);
-
-// Authorize agent
-guard.setAutonomousAgent(0x1111111111111111111111111111111111111111);
-
-// Set single cap: 100 USDC (100 * 1e6), Daily cap: 500 USDC (500 * 1e6)
-guard.updateMandateLimits(100000000, 500000000);
-
-// Whitelist vendor recipient
-guard.setApprovedRecipient(0x0000000000000000000000000000000000041c4e, true);
-
-// Whitelist USDC token
-guard.setApprovedToken(0x4f712dd78Cb1a504C69CB4f68B82Fddb6b3b1df6, true);
-```
-
-#### Step 3: Register Agent Mandate with Supervisory Backend
-Call the backend configuration endpoint to synchronize off-chain policy enforcement:
+#### Step 2: Bind Agent & Synchronize On-Chain Guard
+When the user submits Step 2 of the Onboarding Wizard, the mobile client calls `POST /agents/bind`:
 ```bash
-curl -X POST http://localhost:3001/mandates/agent \
+curl -X POST http://localhost:3001/agents/bind \
+  -H "Authorization: Bearer <privy_token>" \
   -H "Content-Type: application/json" \
   -d '{
-    "agentAddress": "0x1111111111111111111111111111111111111111",
-    "maxAutonomousAmount": "100000000",
-    "dailyAutonomousLimit": "500000000",
-    "approvedRecipients": [
-      "0x0000000000000000000000000000000000041c4e"
-    ],
-    "approvedTokens": [
-      "0x4f712dd78Cb1a504C69CB4f68B82Fddb6b3b1df6"
-    ]
+    "agentAddress": "0x42AbCdEf01234567890123456789012345678901",
+    "name": "Autonomous Treasury Agent",
+    "safeAddress": "0x4f712dd78Cb1a504C69CB4f68B82Fddb6b3b1df6",
+    "guardAddress": "0x9b6023D1B6D3b076C8d999Ba406AE486750ce7d3",
+    "chainId": 84532
   }'
 ```
+Backend relayer (`0x988B225185b516DEF12A7Ec841abae9072ef4EE8`) immediately broadcasts a transaction to the live `Chapter2Guard` contract on Base Sepolia:
+```solidity
+// Guard contract receives the user's Privy embedded wallet
+Chapter2Guard(0x9b6023D1B6D3b076C8d999Ba406AE486750ce7d3).setAutonomousAgent(PRIVY_WALLET_ADDRESS);
+```
 
-#### Step 4: Verify Deployment Status
+#### Step 3: Configure Spending Caps & Whitelists
+Mandate limits are enforced both in the on-chain Guard and the backend deterministic policy engine:
+- **Single Autonomous Limit**: 100 USDC (`100 * 1e6` = `100000000`)
+- **Daily Autonomous Budget**: 500 USDC (`500 * 1e6` = `500000000`)
+- **Vendor Whitelist**: `0x0000000000000000000000000000000000041c4e` (Alchemy)
+- **Token Whitelist**: `0x4f712dd78Cb1a504C69CB4f68B82Fddb6b3b1df6` (Safe Native / USDC)
+
+#### Step 4: Verify Live Mandate & Agent Registration
 ```bash
 curl -s http://localhost:3001/mandates/active
 ```
@@ -352,8 +343,8 @@ Expected output:
   "chainId": 84532,
   "safeAddress": "0x4f712dd78Cb1a504C69CB4f68B82Fddb6b3b1df6",
   "guardAddress": "0x9b6023D1B6D3b076C8d999Ba406AE486750ce7d3",
-  "autonomousAgent": "0x1111111111111111111111111111111111111111",
-  "humanSigner": "0xe05fcC23807536bEe418f142D19fa0d21BB0cfF7",
+  "autonomousAgent": "0x42AbCdEf01234567890123456789012345678901",
+  "humanSigner": "0x4f712dd78Cb1a504C69CB4f68B82Fddb6b3b1df6",
   "maxAutonomousAmountUsdc": 100.0,
   "dailyAutonomousLimitUsdc": 500.0,
   "remainingDailyBudgetUsdc": 500.0,

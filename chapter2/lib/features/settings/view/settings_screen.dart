@@ -277,7 +277,55 @@ class SettingsScreen extends StatelessWidget {
                     ),
                   ],
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 16),
+                // Danger Zone / Account Deletion
+                _buildSectionCard(
+                  context,
+                  title: 'Account & Privacy',
+                  icon: Icons.shield_outlined,
+                  children: [
+                    Text(
+                      'Permanently remove your identity from Privy Cloud and deactivate all autonomous agents. Historical transaction records, audit receipts, and on-chain proofs remain preserved on Base Sepolia.',
+                      style: AppTextStyles.xs(
+                        context,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    OutlinedButton(
+                      onPressed: () => _showDeleteConfirmation(context),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.block,
+                        side: const BorderSide(color: AppColors.blockBorder),
+                        backgroundColor: AppColors.blockBackground,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(
+                            Icons.delete_forever_rounded,
+                            size: 18,
+                            color: AppColors.block,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Delete Account & Deactivate Agents',
+                            style: AppTextStyles.sm(
+                              context,
+                              color: AppColors.block,
+                              fontWeight: AppTextStyles.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
                 // Sign Out Button
                 ElevatedButton(
                   onPressed: () async {
@@ -285,12 +333,12 @@ class SettingsScreen extends StatelessWidget {
                     onSignOut?.call();
                   },
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.blockBackground,
-                    foregroundColor: AppColors.blockText,
+                    backgroundColor: AppColors.screenBackgroundElevated,
+                    foregroundColor: AppColors.textLight,
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(16),
-                      side: const BorderSide(color: AppColors.blockBorder),
+                      side: const BorderSide(color: AppColors.actionPillBorder),
                     ),
                     elevation: 0,
                   ),
@@ -300,14 +348,14 @@ class SettingsScreen extends StatelessWidget {
                       const Icon(
                         Icons.logout_rounded,
                         size: 18,
-                        color: AppColors.blockText,
+                        color: AppColors.textPrimary,
                       ),
                       const SizedBox(width: 8),
                       Text(
                         'Disconnect Session & Sign Out',
                         style: AppTextStyles.md(
                           context,
-                          color: AppColors.blockText,
+                          color: AppColors.textPrimary,
                           fontWeight: AppTextStyles.bold,
                         ),
                       ),
@@ -321,6 +369,158 @@ class SettingsScreen extends StatelessWidget {
         },
       ),
     );
+  }
+
+  Future<void> _showDeleteConfirmation(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: AppColors.cardSurfacePure,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: const BorderSide(color: AppColors.cardBorder),
+        ),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AppColors.blockBackground,
+                shape: BoxShape.circle,
+                border: Border.all(color: AppColors.blockBorder),
+              ),
+              child: const Icon(
+                Icons.warning_rounded,
+                color: AppColors.block,
+                size: 20,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Text(
+              'Delete Account?',
+              style: AppTextStyles.lg(
+                dialogContext,
+                color: Colors.white,
+                fontWeight: AppTextStyles.bold,
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Are you sure you want to delete your Chapter2 account? Your autonomous agent will be deactivated, and your account will be removed from Privy Cloud.',
+              style: AppTextStyles.sm(
+                dialogContext,
+                color: AppColors.textPrimary,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.screenBackground,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppColors.cardBorder),
+              ),
+              child: Text(
+                'Audit Guarantee: Historical on-chain execution receipts and audit logs will remain intact on Base Sepolia.',
+                style: AppTextStyles.xs(
+                  dialogContext,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: Text(
+              'Cancel',
+              style: AppTextStyles.sm(
+                dialogContext,
+                color: AppColors.textSecondary,
+              ),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.block,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              elevation: 0,
+            ),
+            child: Text(
+              'Delete Account',
+              style: AppTextStyles.sm(
+                dialogContext,
+                color: Colors.white,
+                fontWeight: AppTextStyles.bold,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && context.mounted) {
+      try {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Row(
+              children: [
+                SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
+                ),
+                SizedBox(width: 12),
+                Text('Deleting account and deactivating agent...'),
+              ],
+            ),
+            duration: Duration(seconds: 10),
+            backgroundColor: AppColors.cardSurfacePure,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+
+        await context.read<AuthCubit>().deleteAccount();
+
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).hideCurrentSnackBar();
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Account deleted successfully'),
+              backgroundColor: AppColors.allow,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+          onSignOut?.call();
+          context.router.replaceAll([LoginRoute()]);
+        }
+      } catch (e) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).hideCurrentSnackBar();
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Failed to delete account: $e'),
+              backgroundColor: AppColors.block,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      }
+    }
   }
 
   Widget _buildSectionCard(

@@ -118,4 +118,12 @@ class AuthService {
     _apiClient.setAuthToken(null);
     await _privyManager.logout();
   }
+
+  /// Soft-deletes user account in backend, deactivates agents, and deletes user from Privy Cloud.
+  Future<void> deleteAccount() async {
+    await _apiClient.delete('/auth/account');
+    _currentUser = null;
+    _apiClient.setAuthToken(null);
+    await _privyManager.logout();
+  }
 }

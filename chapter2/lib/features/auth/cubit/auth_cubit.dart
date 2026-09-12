@@ -80,4 +80,17 @@ class AuthCubit extends Cubit<AuthState> {
     await _authService.logout();
     emit(const AuthState(status: AuthStatus.unauthenticated));
   }
+
+  Future<void> deleteAccount() async {
+    emit(state.copyWith(status: AuthStatus.loading));
+    try {
+      await _authService.deleteAccount();
+      emit(const AuthState(status: AuthStatus.unauthenticated));
+    } catch (e) {
+      emit(
+        state.copyWith(status: AuthStatus.error, errorMessage: e.toString()),
+      );
+      rethrow;
+    }
+  }
 }

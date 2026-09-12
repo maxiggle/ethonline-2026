@@ -20,7 +20,7 @@ import { GatewayModule } from '../gateway/gateway.module';
     GatewayModule,
   ],
   controllers: [ActionsController],
-  providers: [ActionStoreService],
-  exports: [ActionStoreService],
+  providers: [ActionStoreService, ActionsController],
+  exports: [ActionStoreService, ActionsController],
 })
 export class ActionsModule {}

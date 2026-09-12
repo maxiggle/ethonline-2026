@@ -59,14 +59,16 @@ export class AgentsService {
       this.logger.debug(`Could not update mandate autonomous_agent: ${err.message}`);
     }
 
-    // Synchronize with live on-chain Chapter2Guard contract if executor is configured
+    // Synchronize with live on-chain Chapter2Guard contract asynchronously
     if (this.onChainExecutor) {
-      try {
-        await this.onChainExecutor.setAutonomousAgent(agentAddress);
-        this.logger.log(`On-chain Chapter2Guard updated with autonomous agent: ${agentAddress}`);
-      } catch (onChainErr: any) {
-        this.logger.warn(`On-chain agent registration warning: ${onChainErr.message}`);
-      }
+      this.onChainExecutor
+        .setAutonomousAgent(agentAddress)
+        .then((txHash) => {
+          this.logger.log(`On-chain Chapter2Guard updated with autonomous agent: ${agentAddress} (Tx: ${txHash})`);
+        })
+        .catch((onChainErr: any) => {
+          this.logger.warn(`On-chain agent registration warning: ${onChainErr.message}`);
+        });
     }
 
     const created = await this.getAgentById(id);

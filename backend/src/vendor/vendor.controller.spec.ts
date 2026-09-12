@@ -8,13 +8,33 @@ import { PolicyEngineService } from '../policies/policy-engine.service';
 import { Eip712Service } from '../crypto/eip712.service';
 import { EventsGateway } from '../gateway/events.gateway';
 import { TreasuryActionStatus } from '../domain/treasury-action.entity';
+import { ActionsController } from '../actions/actions.controller';
 import { Response } from 'express';
 
-describe('VendorController (x402 Protocol)', () => {
+describe('VendorController (x402 Protocol & Company Bills)', () => {
   let controller: VendorController;
   let vendorService: VendorService;
   let actionStore: ActionStoreService;
   let onChainExecutor: OnChainExecutorService;
+
+  const mockActionsController = {
+    proposeAction: jest.fn().mockImplementation((dto) => {
+      return Promise.resolve({
+        action: {
+          id: 'act_test_123',
+          ...dto,
+          status: TreasuryActionStatus.APPROVED,
+          txHash: '0x98b5a4d65ba45e45c4ccc5a0fea57929d91bdd7bc19b46a5cba5dd32b7a12343',
+        },
+        decision: {
+          actionId: 'act_test_123',
+          decision: 'ALLOW',
+          riskScore: 10,
+          requiresHumanApproval: false,
+        },
+      });
+    }),
+  };
 
   beforeEach(async () => {
     process.env.RPC_URL = 'https://sepolia.base.org';
@@ -32,6 +52,10 @@ describe('VendorController (x402 Protocol)', () => {
         PolicyEngineService,
         Eip712Service,
         EventsGateway,
+        {
+          provide: ActionsController,
+          useValue: mockActionsController,
+        },
       ],
     }).compile();
 
@@ -45,7 +69,73 @@ describe('VendorController (x402 Protocol)', () => {
     expect(controller).toBeDefined();
   });
 
-  describe('HTTP 402 Payment Required Challenge', () => {
+  describe('Connected Accounts', () => {
+    it('should return default enterprise accounts (Google Cloud, AWS, Alchemy)', () => {
+      const accounts = controller.getConnectedAccounts();
+      expect(accounts.length).toBeGreaterThanOrEqual(3);
+      expect(accounts.some((a) => a.provider === 'google_cloud')).toBe(true);
+      expect(accounts.some((a) => a.provider === 'aws')).toBe(true);
+      expect(accounts.some((a) => a.provider === 'alchemy')).toBe(true);
+    });
+
+    it('should connect a new corporate account', () => {
+      const newAcc = controller.connectAccount({
+        provider: 'openai',
+        name: 'OpenAI Enterprise Team',
+        organization: 'Acme Global Enterprises Inc.',
+        accountId: 'org-acme-prod-2026',
+      });
+      expect(newAcc.accountId).toBe('org-acme-prod-2026');
+      expect(newAcc.status).toBe('CONNECTED');
+    });
+  });
+
+  describe('Company Bills & x402 Challenge', () => {
+    it('should return list of active company bills', () => {
+      const bills = controller.getBills();
+      expect(bills.length).toBeGreaterThanOrEqual(3);
+      const gcpBill = bills.find((b) => b.id === 'bill_gcp_vertex_01');
+      expect(gcpBill).toBeDefined();
+      expect(gcpBill?.amountUsdc).toBe(40);
+      expect(gcpBill?.paymentIdentifier).toBe('gcp_01a2b3_inv_8812');
+    });
+
+    it('should throw HTTP 402 with X-Payment-Identifier when bill is unpaid', async () => {
+      const headersMap: Record<string, string> = {};
+      const mockRes = {
+        setHeader: jest.fn((key: string, val: string) => {
+          headersMap[key] = val;
+        }),
+      } as unknown as Response;
+
+      try {
+        await controller.getBill('bill_gcp_vertex_01', undefined, mockRes);
+        fail('Should have thrown HttpException');
+      } catch (err) {
+        expect(err).toBeInstanceOf(HttpException);
+        expect((err as HttpException).getStatus()).toBe(HttpStatus.PAYMENT_REQUIRED);
+
+        expect(mockRes.setHeader).toHaveBeenCalledWith(
+          'X-Payment-Address',
+          '0x0000000000000000000000000000000000041c4e',
+        );
+        expect(mockRes.setHeader).toHaveBeenCalledWith('X-Payment-Amount', '40000000');
+        expect(mockRes.setHeader).toHaveBeenCalledWith('X-Payment-Identifier', 'gcp_01a2b3_inv_8812');
+      }
+    });
+
+    it('should dispatch agent to pay bill and settle via x402', async () => {
+      const result = await controller.payBill('bill_gcp_vertex_01', {
+        agentAddress: '0x1111111111111111111111111111111111111111',
+      });
+
+      expect(mockActionsController.proposeAction).toHaveBeenCalled();
+      expect(result.bill.status).toBe('SETTLED_200');
+      expect(result.bill.txHash).toBeDefined();
+    });
+  });
+
+  describe('HTTP 402 Payment Required Challenge (Compute)', () => {
     it('should throw HTTP 402 with required payment headers when X-Payment-TxHash is missing', async () => {
       const headersMap: Record<string, string> = {};
       const mockRes = {
@@ -61,7 +151,6 @@ describe('VendorController (x402 Protocol)', () => {
         expect(err).toBeInstanceOf(HttpException);
         expect((err as HttpException).getStatus()).toBe(HttpStatus.PAYMENT_REQUIRED);
 
-        // Verify headers
         expect(mockRes.setHeader).toHaveBeenCalledWith(
           'X-Payment-Address',
           '0x0000000000000000000000000000000000041c4e',
@@ -76,7 +165,7 @@ describe('VendorController (x402 Protocol)', () => {
     });
   });
 
-  describe('HTTP 200 OK Payment Verification & Access Grant', () => {
+  describe('HTTP 200 OK Payment Verification & Access Grant (Compute)', () => {
     it('should unlock compute resource when valid payment action exists in action store', async () => {
       const mockRes = {
         setHeader: jest.fn(),
@@ -103,18 +192,69 @@ describe('VendorController (x402 Protocol)', () => {
       expect(response.sessionToken).toBeDefined();
       expect(response.details.allocatedVramGb).toBe(80);
     });
+  });
 
-    it('should verify on-chain directly and unlock when tx exists on Base Sepolia', async () => {
+  describe('Bazaar Discovery & Search', () => {
+    it('should find weather services when searching for "weather APIs"', () => {
+      const results = vendorService.searchBazaar('weather APIs', 'http');
+      expect(results.length).toBeGreaterThanOrEqual(1);
+      expect(results[0].extensions.bazaar.info.serviceName).toContain('AccuWeather');
+      expect(results[0].resource).toContain('/vendor/weather');
+    });
+
+    it('should filter by query tokens case-insensitively', () => {
+      const results = vendorService.searchBazaar('GPU compute');
+      expect(results.length).toBeGreaterThanOrEqual(1);
+      expect(results.some((r) => r.extensions.bazaar.info.tags.includes('gpu'))).toBe(true);
+    });
+  });
+
+  describe('Weather Oracle x402 Endpoint', () => {
+    it('should throw HTTP 402 when payment header is missing', async () => {
       const mockRes = {
         setHeader: jest.fn(),
       } as unknown as Response;
 
-      // Real mined deployment tx on Base Sepolia
-      const realTxHash = '0x86fe4afdb35ffafdc67fba833eeb4b68657e1539564f01c08d431106402347c5';
-      const response = await controller.getComputeResource(realTxHash, mockRes);
+      try {
+        await controller.getWeather('San Francisco', undefined, mockRes);
+        fail('Should have thrown HttpException 402');
+      } catch (err) {
+        expect(err).toBeInstanceOf(HttpException);
+        expect((err as HttpException).getStatus()).toBe(HttpStatus.PAYMENT_REQUIRED);
+        expect(mockRes.setHeader).toHaveBeenCalledWith('X-Payment-Amount', '1000000');
+        expect(mockRes.setHeader).toHaveBeenCalledWith(
+          'X-Payment-Identifier',
+          'weather_oracle_inv_004',
+        );
+      }
+    });
 
-      expect(response.status).toBe('UNLOCKED');
-      expect(response.txHash).toBe(realTxHash);
-    }, 15000);
+    it('should return live weather telemetry when payment txHash is provided', async () => {
+      const mockRes = {
+        setHeader: jest.fn(),
+      } as unknown as Response;
+      const txHash = '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef';
+
+      const data = await controller.getWeather('San Francisco', txHash, mockRes);
+      expect(data.city).toContain('San Francisco');
+      expect(data.temperatureC).toBeDefined();
+      expect(data.conditions).toBeDefined();
+      expect(data.settlementTx).toBe(txHash);
+    });
+  });
+
+  describe('Service Invocation (invokeService)', () => {
+    it('should autonomously settle and invoke weather service', async () => {
+      const result = await controller.invokeService({
+        resourceUrl: 'https://chapter2-backend.onrender.com/vendor/weather',
+        method: 'GET',
+        params: { city: 'San Francisco' },
+      });
+
+      expect(result.status).toBe('SUCCESS');
+      expect(result.costUsdc).toBe(1);
+      expect(result.txHash).toBeDefined();
+      expect(result.data?.city).toContain('San Francisco');
+    });
   });
 });

@@ -7,6 +7,7 @@ import {
   ZeroAddress,
   getAddress,
   TransactionReceipt,
+  formatEther,
 } from 'ethers';
 import { TreasuryAction, TreasuryActionStatus } from '../domain/treasury-action.entity';
 import { ActionStoreService } from '../actions/action-store.service';
@@ -29,8 +30,10 @@ const GUARD_ABI = [
   'function dailyAutonomousLimit() external view returns (uint256)',
   'function getRemainingDailyBudget() external view returns (uint256)',
   'function safeAddress() external view returns (address)',
+  'function autonomousAgent() external view returns (address)',
   'function isApprovedRecipient(address recipient) external view returns (bool)',
   'function isApprovedToken(address token) external view returns (bool)',
+  'function setAutonomousAgent(address _agent) external',
 ];
 
 const ERC20_ABI = [
@@ -351,5 +354,41 @@ export class OnChainExecutorService {
     } catch (err) {
       return { verified: false, error: err.message };
     }
+  }
+
+  /**
+   * Updates the authorized autonomousAgent on the deployed Chapter2Guard contract on Base Sepolia.
+   * Executed by the contract owner (relayerWallet).
+   */
+  async setAutonomousAgent(agentAddress: string): Promise<string> {
+    const checksummed = getAddress(agentAddress);
+    return this.runWithMutex(async () => {
+      this.logger.log(`Registering autonomous agent ${checksummed} on Guard ${this.guardAddress}...`);
+      const guardWithSigner = new Contract(this.guardAddress, GUARD_ABI, this.relayerWallet);
+      const tx = await guardWithSigner.setAutonomousAgent(checksummed);
+      this.logger.log(`Broadcasted setAutonomousAgent tx ${tx.hash}, waiting for confirmation...`);
+      const receipt: TransactionReceipt = await tx.wait();
+      if (!receipt || receipt.status !== 1) {
+        throw new Error(`setAutonomousAgent transaction failed or reverted: ${receipt?.hash || tx.hash}`);
+      }
+      this.logger.log(`Autonomous agent successfully updated on-chain to ${checksummed} (Tx: ${receipt.hash})`);
+      return receipt.hash;
+    });
+  }
+
+  /**
+   * Queries the live on-chain USDC and ETH balances held by the Gnosis Safe treasury vault on Base Sepolia.
+   */
+  async getTreasuryBalance(): Promise<{ usdcBalance: number; ethBalance: string }> {
+    const usdcAddress = process.env.USDC_ADDRESS || '0x036CbD53842c5426634e7929541eC2318f3dCF7e';
+    const usdcContract = new Contract(usdcAddress, ERC20_ABI, this.provider);
+    const [rawUsdc, rawEth] = await Promise.all([
+      usdcContract.balanceOf(this.safeAddress),
+      this.provider.getBalance(this.safeAddress),
+    ]);
+    return {
+      usdcBalance: Number(rawUsdc) / 1e6,
+      ethBalance: formatEther(rawEth),
+    };
   }
 }

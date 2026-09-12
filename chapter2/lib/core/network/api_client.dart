@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:chapter2/core/config/app_config.dart';
 import 'package:chapter2/core/network/data_layer_exception.dart';
 import 'package:dio/dio.dart';
 
@@ -7,7 +8,7 @@ class ApiClient {
       : _dio = dioClient ??
             Dio(
               BaseOptions(
-                baseUrl: baseUrl ?? 'http://localhost:3001',
+                baseUrl: baseUrl ?? AppConfig.backendBaseUrl,
                 connectTimeout: const Duration(seconds: 10),
                 receiveTimeout: const Duration(seconds: 10),
                 headers: {

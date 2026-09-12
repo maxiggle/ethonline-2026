@@ -3,11 +3,12 @@ import 'package:chapter2/features/auth/cubit/auth_cubit.dart';
 import 'package:chapter2/features/auth/cubit/auth_state.dart';
 import 'package:chapter2/features/auth/models/user_identity.dart';
 import 'package:chapter2/features/auth/models/agent_model.dart';
+import 'package:chapter2/core/config/app_config.dart';
 import 'package:chapter2/features/auth/services/auth_service.dart';
 import 'package:chapter2/core/network/api_client.dart';
 
 class MockAuthService extends AuthService {
-  MockAuthService() : super(apiClient: ApiClient(baseUrl: 'http://localhost:3001'));
+  MockAuthService() : super(apiClient: ApiClient(baseUrl: AppConfig.backendBaseUrl));
 
   bool shouldThrow = false;
 

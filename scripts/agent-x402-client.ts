@@ -13,7 +13,7 @@
 import * as path from 'path';
 import { spawn, ChildProcess } from 'child_process';
 
-const DEFAULT_SERVER_URL = process.env.API_BASE_URL || 'http://localhost:3001';
+const DEFAULT_SERVER_URL = process.env.API_BASE_URL || 'https://chapter2-backend.onrender.com';
 const AGENT_ADDRESS = '0x1111111111111111111111111111111111111111';
 
 async function waitForServer(url: string, timeoutMs: number = 15000): Promise<boolean> {

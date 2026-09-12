@@ -9,6 +9,8 @@
  * 4. Guardian Tri-Verdict Policy Check -> Evaluates Safe mandate autonomous spending limit
  * 5. On-Chain Safe Transaction Execution & Settlement via Relayer
  * 6. Resource Access & Verification -> Verifies corporate receipt with X-Payment-Identifier
+ *
+ * Treasury routes require the Privy bearer token of the user who owns AGENT_ADDRESS (AUTH_TOKEN).
  */
 
 async function main() {
@@ -26,9 +28,18 @@ async function main() {
     process.exit(1);
   }
 
+  const authToken = process.env.AUTH_TOKEN;
+  if (!authToken) {
+    console.error('[CONFIGURATION ERROR]: Missing required environment variable AUTH_TOKEN.');
+    console.error('Provide the Privy bearer token of the user who owns the autonomous agent.\n');
+    process.exit(1);
+  }
+  const authorizationHeaders = { Authorization: `Bearer ${authToken}` };
+  const authorizedJsonHeaders = { ...authorizationHeaders, 'Content-Type': 'application/json' };
+
   // Verify server reachability
   try {
-    const healthCheck = await fetch(`${serverUrl}/actions`, { signal: AbortSignal.timeout(3000) });
+    const healthCheck = await fetch(`${serverUrl}/mandates/active`, { signal: AbortSignal.timeout(3000) });
     if (healthCheck.status >= 500) {
       throw new Error(`Server returned error status ${healthCheck.status}`);
     }
@@ -110,7 +121,7 @@ async function main() {
       const input = selectedService.extensions?.bazaar?.info?.input;
       const callRes = await fetch(`${serverUrl}/discovery/call`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authorizedJsonHeaders,
         body: JSON.stringify({
           resourceUrl: selectedService.resource,
           method: input?.method ?? 'GET',
@@ -125,6 +136,8 @@ async function main() {
         console.log(`  ├─ Cost       : $${callResult.costUsdc} USDC`);
         console.log(`  ├─ Tx Hash    : ${callResult.txHash}`);
         console.log(`  └─ Response   : ${JSON.stringify(callResult.data)}\n`);
+      } else {
+        console.log(`[CALL FAILED] POST /discovery/call returned ${callRes.status}: ${await callRes.text()}\n`);
       }
     }
   }
@@ -136,7 +149,7 @@ async function main() {
   console.log('[STEP 2] Fetching Enterprise Company Invoices: GET /vendor/bills');
   console.log('-------------------------------------------------------------');
 
-  const billsRes = await fetch(`${serverUrl}/vendor/bills`);
+  const billsRes = await fetch(`${serverUrl}/vendor/bills`, { headers: authorizationHeaders });
   if (!billsRes.ok) {
     throw new Error(`Failed to fetch bills from ${serverUrl}/vendor/bills: ${billsRes.status} ${billsRes.statusText}`);
   }
@@ -187,7 +200,7 @@ async function main() {
 
     const payRes = await fetch(`${serverUrl}/vendor/bills/${billId}/pay`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: authorizedJsonHeaders,
       body: JSON.stringify({ agentAddress }),
     });
 

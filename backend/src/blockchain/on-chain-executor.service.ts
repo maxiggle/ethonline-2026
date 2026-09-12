@@ -39,7 +39,12 @@ const GUARD_ABI = [
 const ERC20_ABI = [
   'function transfer(address to, uint256 amount) external returns (bool)',
   'function balanceOf(address account) external view returns (uint256)',
+  'event Transfer(address indexed from, address indexed to, uint256 value)',
 ];
+
+const ERC20_TRANSFER_EVENT_INTERFACE = new Interface([
+  'event Transfer(address indexed from, address indexed to, uint256 value)',
+]);
 
 @Injectable()
 export class OnChainExecutorService {
@@ -366,6 +371,64 @@ export class OnChainExecutorService {
     } catch (err) {
       return { verified: false, error: err.message };
     }
+  }
+
+  /**
+   * Verifies that a mined transaction transferred at least `minimumAmount` of `token` to `recipient`,
+   * by decoding ERC-20 Transfer logs from the receipt. Used to redeem x402 payments.
+   */
+  async verifyTokenTransfer(
+    txHash: string,
+    expectedTransfer: { token: string; recipient: string; minimumAmount: bigint },
+  ): Promise<
+    | { verified: true; transferredAmount: bigint }
+    | { verified: false; error: string; transferredAmount?: bigint }
+  > {
+    let receipt: TransactionReceipt | null;
+    try {
+      receipt = await this.provider.getTransactionReceipt(txHash);
+    } catch (err) {
+      return { verified: false, error: err.message };
+    }
+
+    if (!receipt) {
+      return { verified: false, error: 'Transaction receipt not found on-chain' };
+    }
+    if (receipt.status !== 1) {
+      return { verified: false, error: 'Transaction reverted on-chain' };
+    }
+
+    const expectedToken = getAddress(expectedTransfer.token);
+    const expectedRecipient = getAddress(expectedTransfer.recipient);
+
+    let transferredAmount = 0n;
+    for (const log of receipt.logs) {
+      if (getAddress(log.address) !== expectedToken) continue;
+
+      let parsedLog;
+      try {
+        parsedLog = ERC20_TRANSFER_EVENT_INTERFACE.parseLog({
+          topics: log.topics as string[],
+          data: log.data,
+        });
+      } catch {
+        continue;
+      }
+      if (!parsedLog || parsedLog.name !== 'Transfer') continue;
+      if (getAddress(parsedLog.args.to as string) !== expectedRecipient) continue;
+
+      transferredAmount += BigInt(parsedLog.args.value);
+    }
+
+    if (transferredAmount >= expectedTransfer.minimumAmount) {
+      return { verified: true, transferredAmount };
+    }
+
+    return {
+      verified: false,
+      error: `Transferred amount ${transferredAmount.toString()} is below required minimum ${expectedTransfer.minimumAmount.toString()}`,
+      transferredAmount,
+    };
   }
 
   /**

@@ -41,6 +41,8 @@ describe('EventsGateway', () => {
     expect(response).toEqual({ event: 'subscribed', status: 'actions_channel' });
   });
 
+  const sanitize = (obj: any) => JSON.parse(JSON.stringify(obj));
+
   it('should emit action:proposed event', () => {
     const action: TreasuryAction = {
       id: 'act-123',
@@ -66,7 +68,7 @@ describe('EventsGateway', () => {
     expect(mockServer.emit).toHaveBeenCalledWith(
       'action:proposed',
       expect.objectContaining({
-        action,
+        action: sanitize(action),
         timestamp: expect.any(String),
       }),
     );
@@ -111,8 +113,8 @@ describe('EventsGateway', () => {
     expect(mockServer.emit).toHaveBeenCalledWith(
       'action:escalated',
       expect.objectContaining({
-        action,
-        decision,
+        action: sanitize(action),
+        decision: sanitize(decision),
         typedData: { primaryType: 'TreasuryActionApproval' },
         timestamp: expect.any(String),
       }),
@@ -144,7 +146,7 @@ describe('EventsGateway', () => {
     expect(mockServer.emit).toHaveBeenCalledWith(
       'action:approved',
       expect.objectContaining({
-        action,
+        action: sanitize(action),
         safeTxData: '0x1234',
         timestamp: expect.any(String),
       }),
@@ -176,7 +178,7 @@ describe('EventsGateway', () => {
     expect(mockServer.emit).toHaveBeenCalledWith(
       'action:rejected',
       expect.objectContaining({
-        action,
+        action: sanitize(action),
         reason: 'Operator rejected',
         timestamp: expect.any(String),
       }),
@@ -218,8 +220,8 @@ describe('EventsGateway', () => {
     expect(mockServer.emit).toHaveBeenCalledWith(
       'action:blocked',
       expect.objectContaining({
-        action,
-        decision,
+        action: sanitize(action),
+        decision: sanitize(decision),
         timestamp: expect.any(String),
       }),
     );

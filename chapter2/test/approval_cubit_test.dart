@@ -2,15 +2,37 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:chapter2/features/approval/cubit/approval_cubit.dart';
 import 'package:chapter2/features/approval/cubit/approval_state.dart';
 import 'package:chapter2/features/approval/models/eip712_payload.dart';
+import 'package:chapter2/features/timeline/models/treasury_action.dart';
 import 'package:chapter2/services/api/chapter2_api_service.dart';
+import 'package:chapter2/services/api/models/approve_action_response.dart';
+import 'package:chapter2/services/api/models/submit_approval_request.dart';
 
 class MockApprovalApiService extends Chapter2ApiService {
   @override
-  Future<Map<String, dynamic>?> approveAction(
+  Future<ApproveActionResponse> approveAction(
     String actionId,
-    Map<String, dynamic> approvalPayload,
+    SubmitApprovalRequest request,
   ) async {
-    return {'txHash': '0xabc123success'};
+    final action = TreasuryAction(
+      actionId: actionId,
+      agentAddress: '0xAgent',
+      recipientAddress: '0xRecipient',
+      tokenAddress: '0xToken',
+      amountUnits: BigInt.from(850000000),
+      amountDisplayUsdc: 850.0,
+      status: TreasuryActionStatus.executed,
+      riskScore: 78,
+      purpose: 'Annual renewal',
+      timestamp: DateTime.now(),
+      txHash: '0xabc123success',
+    );
+
+    return ApproveActionResponse(
+      action: action,
+      encodedPayload: '0xencoded',
+      signer: request.signer,
+      txHash: '0xabc123success',
+    );
   }
 }
 

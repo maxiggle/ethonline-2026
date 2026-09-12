@@ -1,4 +1,4 @@
-import { Injectable, BadRequestException, Logger } from '@nestjs/common';
+import { Injectable, BadRequestException, Logger, Optional } from '@nestjs/common';
 import { getAddress } from 'ethers';
 import {
   WorldVerificationMode,
@@ -14,6 +14,8 @@ import {
   DEFAULT_WORLD_ACTION,
   WORLD_VERIFY_ENDPOINT_V4,
 } from './world.constants';
+import { DatabaseService } from '../database/database.service';
+import { HumanBindingRow } from '../database/database.interface';
 
 @Injectable()
 export class WorldSelfieService {
@@ -22,16 +24,47 @@ export class WorldSelfieService {
   private rpId: string;
   private action: string;
   private verifyEndpoint: string;
+  private readonly dbService: DatabaseService;
 
-  // In-memory registries (can be backed by persistence in production)
+  // In-memory registries with database write-through persistence
   private readonly humanBindings = new Map<string, HumanBinding>();
   private readonly nullifierToSigner = new Map<string, string>();
 
-  constructor() {
+  constructor(@Optional() dbService?: DatabaseService) {
     this.mode = (process.env.WORLD_ID_MODE as WorldVerificationMode) || 'SANDBOX';
     this.rpId = process.env.WORLD_RP_ID || DEFAULT_WORLD_RP_ID;
     this.action = process.env.WORLD_ACTION || DEFAULT_WORLD_ACTION;
     this.verifyEndpoint = process.env.WORLD_VERIFY_ENDPOINT || WORLD_VERIFY_ENDPOINT_V4;
+
+    if (dbService) {
+      this.dbService = dbService;
+    } else {
+      this.dbService = new DatabaseService();
+      this.dbService.initialize(':memory:');
+    }
+
+    this.loadFromDatabase();
+  }
+
+  private loadFromDatabase(): void {
+    try {
+      const rows = this.dbService.querySync<HumanBindingRow>(
+        'SELECT * FROM human_bindings',
+      );
+      for (const row of rows) {
+        const binding: HumanBinding = {
+          signerAddress: getAddress(row.signer_address),
+          nullifierHash: row.nullifier_hash,
+          credentialType: CREDENTIAL_TYPE_SELFIE,
+          boundAt: new Date(row.bound_at),
+          lastActiveAt: new Date(row.bound_at),
+          expiresAt: new Date(row.expires_at),
+          active: new Date(row.expires_at).getTime() > Date.now(),
+        };
+        this.humanBindings.set(binding.signerAddress, binding);
+        this.nullifierToSigner.set(binding.nullifierHash, binding.signerAddress);
+      }
+    } catch {}
   }
 
   /**
@@ -129,7 +162,19 @@ export class WorldSelfieService {
     const nullifierHash = proof.nullifier_hash;
 
     // Anti-Sybil / Anti-Replay Check: One human nullifier cannot be used by different signers
-    const existingSigner = this.nullifierToSigner.get(nullifierHash);
+    let existingSigner = this.nullifierToSigner.get(nullifierHash);
+    if (!existingSigner) {
+      try {
+        const row = this.dbService.getOneSync<HumanBindingRow>(
+          'SELECT * FROM human_bindings WHERE nullifier_hash = ?',
+          [nullifierHash],
+        );
+        if (row) {
+          existingSigner = getAddress(row.signer_address);
+        }
+      } catch {}
+    }
+
     if (existingSigner && existingSigner !== normalizedSigner) {
       throw new BadRequestException(
         `World ID nullifier has already been bound to another signer address: ${existingSigner}`,
@@ -152,6 +197,19 @@ export class WorldSelfieService {
     this.humanBindings.set(normalizedSigner, binding);
     this.nullifierToSigner.set(nullifierHash, normalizedSigner);
 
+    try {
+      this.dbService.runSync(
+        `INSERT OR REPLACE INTO human_bindings (signer_address, nullifier_hash, bound_at, expires_at)
+         VALUES (?, ?, ?, ?)`,
+        [
+          normalizedSigner,
+          nullifierHash,
+          now.toISOString(),
+          expiresAt.toISOString(),
+        ],
+      );
+    } catch {}
+
     this.logger.log(`Human binding created: ${normalizedSigner} -> Nullifier ${nullifierHash.slice(0, 10)}... (Expires: ${expiresAt.toISOString()})`);
     return binding;
   }
@@ -161,7 +219,29 @@ export class WorldSelfieService {
    */
   async isHumanSignerVerified(signerAddress: string): Promise<boolean> {
     const normalized = getAddress(signerAddress);
-    const binding = this.humanBindings.get(normalized);
+    let binding = this.humanBindings.get(normalized);
+
+    if (!binding) {
+      try {
+        const row = this.dbService.getOneSync<HumanBindingRow>(
+          'SELECT * FROM human_bindings WHERE signer_address = ?',
+          [normalized],
+        );
+        if (row) {
+          binding = {
+            signerAddress: normalized,
+            nullifierHash: row.nullifier_hash,
+            credentialType: CREDENTIAL_TYPE_SELFIE,
+            boundAt: new Date(row.bound_at),
+            lastActiveAt: new Date(row.bound_at),
+            expiresAt: new Date(row.expires_at),
+            active: new Date(row.expires_at).getTime() > Date.now(),
+          };
+          this.humanBindings.set(normalized, binding);
+          this.nullifierToSigner.set(row.nullifier_hash, normalized);
+        }
+      } catch {}
+    }
 
     if (!binding || !binding.active) {
       return false;
@@ -185,8 +265,17 @@ export class WorldSelfieService {
     const binding = this.humanBindings.get(normalized);
 
     if (binding && binding.active) {
-      binding.lastActiveAt = new Date();
-      binding.expiresAt = new Date(Date.now() + SELFIE_INACTIVITY_WINDOW_MS);
+      const now = new Date();
+      const expiresAt = new Date(now.getTime() + SELFIE_INACTIVITY_WINDOW_MS);
+      binding.lastActiveAt = now;
+      binding.expiresAt = expiresAt;
+
+      try {
+        this.dbService.runSync(
+          'UPDATE human_bindings SET expires_at = ? WHERE signer_address = ?',
+          [expiresAt.toISOString(), normalized],
+        );
+      } catch {}
     }
   }
 
@@ -195,7 +284,28 @@ export class WorldSelfieService {
    */
   async getHumanBinding(signerAddress: string): Promise<HumanBinding | null> {
     const normalized = getAddress(signerAddress);
-    return this.humanBindings.get(normalized) || null;
+    let binding = this.humanBindings.get(normalized);
+    if (!binding) {
+      try {
+        const row = this.dbService.getOneSync<HumanBindingRow>(
+          'SELECT * FROM human_bindings WHERE signer_address = ?',
+          [normalized],
+        );
+        if (row) {
+          binding = {
+            signerAddress: normalized,
+            nullifierHash: row.nullifier_hash,
+            credentialType: CREDENTIAL_TYPE_SELFIE,
+            boundAt: new Date(row.bound_at),
+            lastActiveAt: new Date(row.bound_at),
+            expiresAt: new Date(row.expires_at),
+            active: new Date(row.expires_at).getTime() > Date.now(),
+          };
+          this.humanBindings.set(normalized, binding);
+        }
+      } catch {}
+    }
+    return binding || null;
   }
 
   /**
@@ -209,6 +319,9 @@ export class WorldSelfieService {
       this.humanBindings.delete(normalized);
       this.nullifierToSigner.delete(binding.nullifierHash);
     }
+    try {
+      this.dbService.runSync('DELETE FROM human_bindings WHERE signer_address = ?', [normalized]);
+    } catch {}
   }
 
   /**

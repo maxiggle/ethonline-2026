@@ -1,0 +1,118 @@
+// Prisma Schema for Chapter 2 Autonomous Treasury Guardian
+// Standardized on PostgreSQL
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Authenticated User Identity (Google via Privy)
+model User {
+  id            String    @id // Privy DID: did:privy:...
+  email         String?   @unique
+  name          String?
+  avatarUrl     String?
+  walletAddress String?   // Privy Non-Custodial Embedded EVM Wallet address
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  agents        Agent[]
+  mandates      TreasuryMandate[]
+
+  @@map("users")
+}
+
+// Autonomous Agent owned and supervised by a User
+model Agent {
+  id            String    @id @default(uuid())
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  agentAddress  String    // EVM address of autonomous AI agent
+  name          String
+  purpose       String?
+  safeAddress   String    // Associated Safe Multisig
+  guardAddress  String    // Associated Chapter2Guard contract
+  chainId       Int       @default(84532)
+  status        String    @default("ACTIVE") // ACTIVE, PAUSED, REVOKED
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  actions       TreasuryAction[]
+
+  @@index([userId])
+  @@index([agentAddress])
+  @@map("agents")
+}
+
+// Autonomous Treasury Actions proposed by agents or guardians
+model TreasuryAction {
+  id                     String    @id
+  target                 String
+  value                  String    @default("0")
+  data                   String    @default("0x")
+  token                  String
+  recipient              String
+  amount                 String
+  agentAddress           String
+  agentId                String?
+  agent                  Agent?    @relation(fields: [agentId], references: [id], onDelete: SetNull)
+  justification          String
+  status                 String    // PENDING, APPROVED, EXECUTED, REJECTED, BLOCKED, ESCALATED
+  riskScore              Int       @default(0)
+  requiresHumanApproval  Boolean   @default(false)
+  nonce                  Int
+  deadline               BigInt
+  signature              String?
+  txHash                 String?
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+
+  @@index([agentAddress])
+  @@index([status])
+  @@index([nonce])
+  @@map("treasury_actions")
+}
+
+// Treasury Mandate defining autonomous limits and policies
+model TreasuryMandate {
+  id                   String    @id @default(uuid())
+  chainId              Int
+  safeAddress          String
+  guardAddress         String
+  autonomousAgent      String
+  humanSigner          String
+  maxAutonomousAmount  String    // Stored as string to preserve uint256 precision
+  dailyAutonomousLimit String    // Stored as string to preserve uint256 precision
+  approvedRecipients   Json      // JSON array of whitelisted addresses
+  approvedTokens       Json      // JSON array of whitelisted token addresses
+  userId               String?
+  user                 User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  @@unique([chainId, safeAddress])
+  @@map("treasury_mandates")
+}
+
+// Daily Spent Ledger tracking rolling spending against daily limits
+model DailySpentLedger {
+  dayId            Int       @id // Unix timestamp / 86400
+  cumulativeSpent  String    // Stored as string to preserve uint256 precision
+  updatedAt        DateTime  @updatedAt
+
+  @@map("daily_spent_ledger")
+}
+
+// World ID / Biometric Human Binding for hardware or biometric signers
+model HumanBinding {
+  signerAddress    String    @id
+  nullifierHash    String    @unique
+  boundAt          DateTime  @default(now())
+  expiresAt        DateTime
+
+  @@map("human_bindings")
+}

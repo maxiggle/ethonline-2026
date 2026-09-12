@@ -46,12 +46,20 @@ export class EventsGateway implements OnGatewayInit, OnGatewayConnection, OnGate
     return { event: 'subscribed', status: 'actions_channel' };
   }
 
+  private sanitizePayload<T>(payload: T): T {
+    return JSON.parse(
+      JSON.stringify(payload, (_, value) =>
+        typeof value === 'bigint' ? value.toString() : value,
+      ),
+    );
+  }
+
   emitActionProposed(action: TreasuryAction): void {
     if (this.server) {
-      this.server.emit('action:proposed', {
+      this.server.emit('action:proposed', this.sanitizePayload({
         action,
         timestamp: new Date().toISOString(),
-      });
+      }));
     }
   }
 
@@ -62,10 +70,10 @@ export class EventsGateway implements OnGatewayInit, OnGatewayConnection, OnGate
     prompt?: any;
   }): void {
     if (this.server) {
-      this.server.emit('action:escalated', {
+      this.server.emit('action:escalated', this.sanitizePayload({
         ...payload,
         timestamp: new Date().toISOString(),
-      });
+      }));
     }
   }
 
@@ -75,10 +83,10 @@ export class EventsGateway implements OnGatewayInit, OnGatewayConnection, OnGate
     safeTxData?: string;
   }): void {
     if (this.server) {
-      this.server.emit('action:approved', {
+      this.server.emit('action:approved', this.sanitizePayload({
         ...payload,
         timestamp: new Date().toISOString(),
-      });
+      }));
     }
   }
 
@@ -87,10 +95,10 @@ export class EventsGateway implements OnGatewayInit, OnGatewayConnection, OnGate
     reason?: string;
   }): void {
     if (this.server) {
-      this.server.emit('action:rejected', {
+      this.server.emit('action:rejected', this.sanitizePayload({
         ...payload,
         timestamp: new Date().toISOString(),
-      });
+      }));
     }
   }
 
@@ -99,10 +107,22 @@ export class EventsGateway implements OnGatewayInit, OnGatewayConnection, OnGate
     decision: GuardianDecision;
   }): void {
     if (this.server) {
-      this.server.emit('action:blocked', {
+      this.server.emit('action:blocked', this.sanitizePayload({
         ...payload,
         timestamp: new Date().toISOString(),
-      });
+      }));
+    }
+  }
+
+  emitActionExecuted(payload: {
+    action: TreasuryAction;
+    txHash: string;
+  }): void {
+    if (this.server) {
+      this.server.emit('action:executed', this.sanitizePayload({
+        ...payload,
+        timestamp: new Date().toISOString(),
+      }));
     }
   }
 }

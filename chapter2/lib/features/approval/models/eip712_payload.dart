@@ -25,6 +25,21 @@ class Eip712ApprovalPayload extends Equatable {
   final int riskScore;
   final String? signatureHex;
 
+  factory Eip712ApprovalPayload.fromJson(Map<String, dynamic> json) {
+    return Eip712ApprovalPayload(
+      actionId: (json['actionId'] ?? '') as String,
+      agentAddress: (json['agent'] ?? json['agentAddress'] ?? '') as String,
+      recipientAddress: (json['recipient'] ?? json['recipientAddress'] ?? '') as String,
+      tokenAddress: (json['token'] ?? json['tokenAddress'] ?? '') as String,
+      amountUnits: BigInt.parse(json['amount']?.toString() ?? '0'),
+      nonce: (json['nonce'] as num?)?.toInt() ?? 0,
+      deadline: (json['deadline'] as num?)?.toInt() ?? 0,
+      mandateHash: (json['mandateHash'] ?? '') as String,
+      riskScore: (json['riskScore'] as num?)?.toInt() ?? 0,
+      signatureHex: json['signature'] as String?,
+    );
+  }
+
   Map<String, dynamic> toMap() {
     return {
       'actionId': actionId,
@@ -39,6 +54,8 @@ class Eip712ApprovalPayload extends Equatable {
       if (signatureHex != null) 'signature': signatureHex,
     };
   }
+
+  Map<String, dynamic> toJson() => toMap();
 
   @override
   List<Object?> get props => [

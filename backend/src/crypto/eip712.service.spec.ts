@@ -77,9 +77,9 @@ describe('Eip712Service', () => {
 
       expect(typedData.primaryType).toEqual('TreasuryActionApproval');
       expect(typedData.domain.name).toEqual('Chapter2');
-      expect(typedData.domain.chainId).toEqual(84532n);
+      expect(typedData.domain.chainId).toEqual(84532);
       expect(typedData.message.actionId).toEqual(mockParams.actionId);
-      expect(typedData.message.amount).toEqual(850000000n);
+      expect(typedData.message.amount).toEqual('850000000');
       expect(typedData.message.riskScore).toEqual(78);
     });
 

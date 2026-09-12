@@ -1,5 +1,6 @@
 import 'package:chapter2/features/dashboard/cubit/dashboard_state.dart';
 import 'package:chapter2/features/dashboard/models/treasury_metrics.dart';
+import 'package:chapter2/features/timeline/models/treasury_action.dart';
 import 'package:chapter2/services/api/chapter2_api_service.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
@@ -14,8 +15,8 @@ class DashboardCubit extends Cubit<DashboardState> {
     emit(state.copyWith(status: DashboardStatus.loading));
     try {
       final actions = await _apiService.fetchActions();
-      final pendingCount = actions.where((a) => a['status'] == 'PENDING').length;
-      final blockedCount = actions.where((a) => a['status'] == 'REJECTED').length;
+      final pendingCount = actions.where((a) => a.status == TreasuryActionStatus.pending).length;
+      final blockedCount = actions.where((a) => a.status == TreasuryActionStatus.rejected).length;
 
       final metrics = TreasuryMetrics(
         totalTreasuryBalanceUsdc: 150000.0,

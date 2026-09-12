@@ -33,10 +33,18 @@ export class Eip712Service {
     const message = this.formatMessage(params);
 
     return {
-      domain: formattedDomain,
+      domain: {
+        ...formattedDomain,
+        chainId: Number(formattedDomain.chainId),
+      },
       types: EIP712_ACTION_APPROVAL_TYPES,
       primaryType: ACTION_APPROVAL_PRIMARY_TYPE,
-      message,
+      message: {
+        ...message,
+        amount: message.amount.toString(),
+        nonce: Number(message.nonce),
+        deadline: Number(message.deadline),
+      },
     };
   }
 

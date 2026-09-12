@@ -18,7 +18,7 @@ public enum AgentKitSecurityError: Error, Equatable, Sendable {
         case .actionMismatch(let expected, let actual):
             return "Action mismatch. Expected '\(expected)', got '\(actual)'."
         case .bindingExpired90Days(let date):
-            return "Human binding expired on \(date.ISO8601Format()) due to the 90-day inactivity window requirement."
+            return "Human binding expired on \(ISO8601DateFormatter().string(from: date)) due to the 90-day inactivity window requirement."
         case .sybilNullifierReplay(let nullifier, let signer):
             return "Anti-Sybil violation: Nullifier '\(nullifier)' is already bound to another operator address '\(signer)'."
         case .livenessVerificationFailed(let reason):

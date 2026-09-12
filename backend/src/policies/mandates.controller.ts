@@ -4,23 +4,47 @@ import {
   Post,
   Put,
   Body,
+  Req,
+  UseGuards,
   HttpCode,
   HttpStatus,
   Optional,
 } from '@nestjs/common';
+import { IsArray, IsEthereumAddress, IsNumberString, IsOptional } from 'class-validator';
 import { PolicyEngineService } from './policy-engine.service';
 import { OnChainExecutorService } from '../blockchain/on-chain-executor.service';
+import { PrivyAuthGuard } from '../auth/guards/privy-auth.guard';
+import { AuthenticatedRequest } from '../auth/interfaces/authenticated-request.interface';
+import { AgentsService } from '../agents/agents.service';
 
 export class DeployAgentDto {
+  @IsEthereumAddress()
   agentAddress: string;
+
+  @IsOptional()
+  @IsNumberString()
   maxAutonomousAmount?: string;
+
+  @IsOptional()
+  @IsNumberString()
   dailyAutonomousLimit?: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsEthereumAddress({ each: true })
   approvedRecipients?: string[];
+
+  @IsOptional()
+  @IsArray()
+  @IsEthereumAddress({ each: true })
   approvedTokens?: string[];
 }
 
 export class UpdateCapsDto {
+  @IsNumberString()
   maxAutonomousAmount: string;
+
+  @IsNumberString()
   dailyAutonomousLimit: string;
 }
 
@@ -28,6 +52,7 @@ export class UpdateCapsDto {
 export class MandatesController {
   constructor(
     private readonly policyEngine: PolicyEngineService,
+    private readonly agentsService: AgentsService,
     @Optional() private readonly onChainExecutor?: OnChainExecutorService,
   ) {}
 
@@ -70,8 +95,11 @@ export class MandatesController {
   }
 
   @Post('agent')
+  @UseGuards(PrivyAuthGuard)
   @HttpCode(HttpStatus.OK)
-  deployAgent(@Body() dto: DeployAgentDto) {
+  async deployAgent(@Req() request: AuthenticatedRequest, @Body() dto: DeployAgentDto) {
+    await this.agentsService.assertAgentOwnership(request.user.id, dto.agentAddress);
+
     const update: any = {
       autonomousAgent: dto.agentAddress.toLowerCase(),
     };
@@ -93,8 +121,14 @@ export class MandatesController {
   }
 
   @Put('caps')
+  @UseGuards(PrivyAuthGuard)
   @HttpCode(HttpStatus.OK)
-  updateCaps(@Body() dto: UpdateCapsDto) {
+  async updateCaps(@Req() request: AuthenticatedRequest, @Body() dto: UpdateCapsDto) {
+    await this.agentsService.assertAgentOwnership(
+      request.user.id,
+      this.policyEngine.getMandate().autonomousAgent,
+    );
+
     this.policyEngine.updateMandate({
       maxAutonomousAmount: BigInt(dto.maxAutonomousAmount),
       dailyAutonomousLimit: BigInt(dto.dailyAutonomousLimit),

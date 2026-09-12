@@ -51,3 +51,13 @@ export interface X402PaymentReceiptRow {
   amount: string;
   redeemed_at: string;
 }
+
+export interface X402EscalationRow {
+  action_id: string;
+  resource_url: string;
+  typed_data: string; // JSON string
+  signature: string | null;
+  status: 'AWAITING_SIGNATURE' | 'SIGNED' | 'REJECTED';
+  created_at: string;
+  updated_at: string;
+}

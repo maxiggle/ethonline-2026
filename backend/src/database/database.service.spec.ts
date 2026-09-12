@@ -96,4 +96,27 @@ describe('DatabaseService', () => {
     expect(receipt).toBeDefined();
     expect(receipt.resource).toBe('vendor:compute');
   });
+
+  it('should store and sign an x402 escalation', async () => {
+    const actionId = `act_test_${Date.now()}`;
+    await service.run(
+      `INSERT INTO x402_escalations (action_id, resource_url, typed_data, signature, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [actionId, 'https://example.com/x402/chain-report', '{"primaryType":"TransferWithAuthorization"}', null, 'AWAITING_SIGNATURE', new Date().toISOString(), new Date().toISOString()],
+    );
+
+    const created = await service.getOne('SELECT * FROM x402_escalations WHERE action_id = ?', [actionId]);
+    expect(created).toBeDefined();
+    expect(created.status).toBe('AWAITING_SIGNATURE');
+    expect(created.signature).toBeNull();
+
+    const updateResult = await service.run(
+      `UPDATE x402_escalations SET status = ?, signature = ?, updated_at = ? WHERE action_id = ?`,
+      ['SIGNED', '0xdeadbeef', new Date().toISOString(), actionId],
+    );
+    expect(updateResult.changes).toBe(1);
+
+    const signed = await service.getOne('SELECT * FROM x402_escalations WHERE action_id = ?', [actionId]);
+    expect(signed.status).toBe('SIGNED');
+    expect(signed.signature).toBe('0xdeadbeef');
+  });
 });

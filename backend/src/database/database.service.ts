@@ -8,6 +8,7 @@ import {
   DailySpentLedgerRow,
   HumanBindingRow,
   X402PaymentReceiptRow,
+  X402EscalationRow,
 } from './database.interface';
 
 interface InMemoryState {
@@ -18,6 +19,7 @@ interface InMemoryState {
   dailySpentLedger: Map<number, DailySpentLedgerRow>;
   humanBindings: Map<string, HumanBindingRow>;
   x402PaymentReceipts: Map<string, X402PaymentReceiptRow>;
+  x402Escalations: Map<string, X402EscalationRow>;
 }
 
 @Injectable()
@@ -36,6 +38,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     dailySpentLedger: new Map(),
     humanBindings: new Map(),
     x402PaymentReceipts: new Map(),
+    x402Escalations: new Map(),
   };
 
   constructor() {}
@@ -154,6 +157,16 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
         resource VARCHAR(256) NOT NULL,
         amount VARCHAR(64) NOT NULL,
         redeemed_at TIMESTAMPTZ NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS x402_escalations (
+        action_id VARCHAR(128) PRIMARY KEY,
+        resource_url TEXT NOT NULL,
+        typed_data TEXT NOT NULL,
+        signature TEXT,
+        status VARCHAR(32) NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL,
+        updated_at TIMESTAMPTZ NOT NULL
       );
 
       CREATE TABLE IF NOT EXISTS "user" (
@@ -279,6 +292,17 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
           redeemed_at: new Date(row.redeemed_at).toISOString(),
         });
       }
+
+      const escalationsRes = await this.pgPool.query<X402EscalationRow>(
+        'SELECT * FROM x402_escalations',
+      );
+      for (const row of escalationsRes.rows) {
+        this.state.x402Escalations.set(row.action_id, {
+          ...row,
+          created_at: new Date(row.created_at).toISOString(),
+          updated_at: new Date(row.updated_at).toISOString(),
+        });
+      }
     } catch (err: any) {
       this.logger.error(`Error loading state from PostgreSQL: ${err.message}`);
     }
@@ -312,6 +336,9 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
       if (data.x402PaymentReceipts) {
         this.state.x402PaymentReceipts = new Map(Object.entries(data.x402PaymentReceipts));
       }
+      if (data.x402Escalations) {
+        this.state.x402Escalations = new Map(Object.entries(data.x402Escalations));
+      }
     } catch (err: any) {
       this.logger.error(`Error reading persistence file: ${err.message}`);
     }
@@ -333,6 +360,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
         dailySpentLedger: Object.fromEntries(this.state.dailySpentLedger),
         humanBindings: Object.fromEntries(this.state.humanBindings),
         x402PaymentReceipts: Object.fromEntries(this.state.x402PaymentReceipts),
+        x402Escalations: Object.fromEntries(this.state.x402Escalations),
       };
       fs.writeFileSync(this.filePath, JSON.stringify(data, null, 2), 'utf-8');
     } catch (err: any) {
@@ -448,6 +476,14 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
         return item ? ([item] as unknown as T[]) : [];
       }
       return Array.from(this.state.x402PaymentReceipts.values()) as unknown as T[];
+    }
+
+    if (s.includes('FROM X402_ESCALATIONS')) {
+      if (s.includes('WHERE ACTION_ID =')) {
+        const item = this.state.x402Escalations.get(String(params[0]));
+        return item ? ([item] as unknown as T[]) : [];
+      }
+      return Array.from(this.state.x402Escalations.values()) as unknown as T[];
     }
 
     if (s.includes('FROM "USER"') || s.includes('FROM USER ') || s.includes('FROM USERS')) {
@@ -626,7 +662,38 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
       return { changes: 1 };
     }
 
-    // 6. User Identity
+    // 6. x402 Escalations
+    if (s.includes('INTO X402_ESCALATIONS')) {
+      const [action_id, resource_url, typed_data, signature, status, created_at, updated_at] = params;
+      this.state.x402Escalations.set(action_id, {
+        action_id,
+        resource_url,
+        typed_data,
+        signature: signature || null,
+        status,
+        created_at: String(created_at),
+        updated_at: String(updated_at),
+      });
+      this.saveToFile();
+      this.asyncWriteToPostgres(sql, params);
+      return { changes: 1 };
+    }
+
+    if (s.startsWith('UPDATE X402_ESCALATIONS')) {
+      const [status, signature, updated_at, action_id] = params;
+      const existing = this.state.x402Escalations.get(action_id);
+      if (existing) {
+        existing.status = status;
+        existing.signature = signature || null;
+        existing.updated_at = String(updated_at);
+        this.saveToFile();
+        this.asyncWriteToPostgres(sql, params);
+        return { changes: 1 };
+      }
+      return { changes: 0 };
+    }
+
+    // 7. User Identity
     if (s.startsWith('UPDATE "USER"') || s.startsWith('UPDATE "USERS"') || s.startsWith('UPDATE USER ')) {
       if (s.includes('DELETEDAT')) {
         const [deletedAt, updatedAt, id] = params;
@@ -670,7 +737,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
       return { changes: 1 };
     }
 
-    // 7. Agent Management
+    // 8. Agent Management
     if (s.includes('INTO AGENT') || s.includes('INTO "AGENT"') || s.includes('INTO AGENTS')) {
       const [id, userId, agentAddress, name, purpose, safeAddress, guardAddress, chainId, status, createdAt, updatedAt] = params;
       const agent = {

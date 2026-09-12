@@ -1,20 +1,47 @@
 import 'package:chapter2/core/network/api_client.dart';
 import 'package:chapter2/features/auth/models/user_identity.dart';
 import 'package:chapter2/features/auth/models/agent_model.dart';
+import 'package:chapter2/features/auth/services/privy_manager.dart';
 
 class AuthService {
-  AuthService({required ApiClient apiClient}) : _apiClient = apiClient;
+  AuthService({
+    required ApiClient apiClient,
+    PrivyManager? privyManager,
+  })  : _apiClient = apiClient,
+        _privyManager = privyManager ?? PrivyManager();
 
   final ApiClient _apiClient;
+  final PrivyManager _privyManager;
 
   UserIdentity? _currentUser;
   UserIdentity? get currentUser => _currentUser;
 
-  /// Authenticates with a Privy token (obtained from Google or Email OAuth).
-  Future<UserIdentity> loginWithPrivy(String authToken) async {
+  /// Authenticates with Google via Privy OAuth popup/sheet.
+  Future<UserIdentity> loginWithGoogle() async {
+    final privyAuth = await _privyManager.loginWithGoogle();
+    return loginWithPrivy(
+      privyAuth.authToken,
+      email: privyAuth.email,
+      name: privyAuth.name,
+      walletAddress: privyAuth.walletAddress,
+    );
+  }
+
+  /// Authenticates with a Privy token.
+  Future<UserIdentity> loginWithPrivy(
+    String authToken, {
+    String? email,
+    String? name,
+    String? walletAddress,
+  }) async {
     final response = await _apiClient.post(
       '/auth/login',
-      data: {'authToken': authToken},
+      data: {
+        'authToken': authToken,
+        if (email != null) 'email': email,
+        if (name != null) 'name': name,
+        if (walletAddress != null) 'walletAddress': walletAddress,
+      },
     );
 
     final userData = response['user'] as Map<String, dynamic>;

@@ -106,28 +106,56 @@ export class PrivyAuthService {
   async syncUser(identity: PrivyUserIdentity): Promise<any> {
     const now = new Date().toISOString();
 
-    const sql = `
-      INSERT INTO "user" (id, email, name, "avatarUrl", "walletAddress", "createdAt", "updatedAt")
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT (id) DO UPDATE SET
-        email = EXCLUDED.email,
-        name = EXCLUDED.name,
-        "avatarUrl" = EXCLUDED."avatarUrl",
-        "walletAddress" = EXCLUDED."walletAddress",
-        "updatedAt" = EXCLUDED."updatedAt"
-    `;
+    // 1. Check if user already exists by ID
+    let existingUser = await this.getUser(identity.id);
 
-    await this.dbService.run(sql, [
-      identity.id,
-      identity.email || null,
-      identity.name || null,
-      identity.avatarUrl || null,
-      identity.walletAddress || null,
-      now,
-      now,
-    ]);
+    // 2. If not found by ID, check by email to prevent duplicate key violations on unique email
+    if (!existingUser && identity.email) {
+      const rows = await this.dbService.query(
+        'SELECT * FROM "user" WHERE email = ?',
+        [identity.email],
+      );
+      if (rows.length > 0) {
+        existingUser = rows[0];
+      }
+    }
 
-    return await this.getUser(identity.id);
+    if (existingUser) {
+      const updateSql = `
+        UPDATE "user"
+        SET
+          email = ?,
+          name = ?,
+          "avatarUrl" = ?,
+          "walletAddress" = ?,
+          "updatedAt" = ?
+        WHERE id = ?
+      `;
+      await this.dbService.run(updateSql, [
+        identity.email || existingUser.email,
+        identity.name || existingUser.name,
+        identity.avatarUrl || existingUser.avatarUrl,
+        identity.walletAddress || existingUser.walletAddress,
+        now,
+        existingUser.id,
+      ]);
+      return await this.getUser(existingUser.id);
+    } else {
+      const insertSql = `
+        INSERT INTO "user" (id, email, name, "avatarUrl", "walletAddress", "createdAt", "updatedAt")
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `;
+      await this.dbService.run(insertSql, [
+        identity.id,
+        identity.email || null,
+        identity.name || null,
+        identity.avatarUrl || null,
+        identity.walletAddress || null,
+        now,
+        now,
+      ]);
+      return await this.getUser(identity.id);
+    }
   }
 
   /**

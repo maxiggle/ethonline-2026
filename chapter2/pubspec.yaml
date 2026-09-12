@@ -43,6 +43,7 @@ dependencies:
     path: ../packages/ledger_keyring
   agent_security:
     path: ../packages/agent_security
+  privy_flutter: ^0.10.2
 
 dev_dependencies:
   flutter_test:

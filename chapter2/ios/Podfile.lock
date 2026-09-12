@@ -1,14 +1,26 @@
 PODS:
   - agent_security (0.0.1):
     - Flutter
+  - Factory (2.4.3)
   - Flutter (1.0.0)
   - ledger_keyring (0.0.1):
     - Flutter
+  - privy_flutter (0.0.1):
+    - Factory (= 2.4.3)
+    - Flutter
+    - PrivySDK (= 2.16.2)
+  - PrivySDK (2.16.2)
 
 DEPENDENCIES:
   - agent_security (from `.symlinks/plugins/agent_security/ios`)
   - Flutter (from `Flutter`)
   - ledger_keyring (from `.symlinks/plugins/ledger_keyring/ios`)
+  - privy_flutter (from `.symlinks/plugins/privy_flutter/ios`)
+
+SPEC REPOS:
+  trunk:
+    - Factory
+    - PrivySDK
 
 EXTERNAL SOURCES:
   agent_security:
@@ -17,12 +29,17 @@ EXTERNAL SOURCES:
     :path: Flutter
   ledger_keyring:
     :path: ".symlinks/plugins/ledger_keyring/ios"
+  privy_flutter:
+    :path: ".symlinks/plugins/privy_flutter/ios"
 
 SPEC CHECKSUMS:
   agent_security: a911b600c4ec1b040b44fe9461171ec6ffbf991f
+  Factory: 9d20d8cb56fc44b341d6dad1cf67dc93e9ae7788
   Flutter: cabc95a1d2626b1b06e7179b784ebcf0c0cde467
   ledger_keyring: 908fa732d663886c58c132bfd2c5769ddb7e1799
+  privy_flutter: 5596a3da3f77360c092699d95e5e6dfc9fecc960
+  PrivySDK: 16d402c35855bfd4521cd57b53ed1ca6f70c8c25
 
-PODFILE CHECKSUM: d71a8f9d234bf288cee64b372c30c196c8075224
+PODFILE CHECKSUM: 04d97c35eee2f58be76ac97bfe2f9622f66611af
 
 COCOAPODS: 1.17.0

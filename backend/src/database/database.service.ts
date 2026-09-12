@@ -546,6 +546,21 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     }
 
     // 5. User Identity
+    if (s.startsWith('UPDATE "USER"') || s.startsWith('UPDATE "USERS"') || s.startsWith('UPDATE USER ')) {
+      const [email, name, avatarUrl, walletAddress, updatedAt, id] = params;
+      const existing = this.state.users.get(id);
+      if (existing) {
+        if (email !== undefined) existing.email = email;
+        if (name !== undefined) existing.name = name;
+        if (avatarUrl !== undefined) existing.avatarUrl = avatarUrl;
+        if (walletAddress !== undefined) existing.walletAddress = walletAddress;
+        existing.updatedAt = String(updatedAt);
+      }
+      this.saveToFile();
+      this.asyncWriteToPostgres(sql, params);
+      return { changes: 1 };
+    }
+
     if (s.includes('INTO "USER"') || s.includes('INTO USER ') || s.includes('INTO USERS')) {
       const [id, email, name, avatarUrl, walletAddress, createdAt, updatedAt] = params;
       const user = {

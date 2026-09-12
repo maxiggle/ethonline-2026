@@ -2,6 +2,7 @@ import {
   Controller,
   Post,
   Get,
+  Delete,
   Body,
   UseGuards,
   Req,
@@ -49,5 +50,15 @@ export class AuthController {
       success: true,
       user: user || req.user,
     };
+  }
+
+  /**
+   * Protected endpoint soft-deleting user account and removing user from Privy Cloud.
+   * Preserves historical transaction receipts, audit logs, and on-chain records.
+   */
+  @Delete('account')
+  @UseGuards(PrivyAuthGuard)
+  async deleteAccount(@Req() req: any) {
+    return await this.authService.deleteUserAccount(req.user.id);
   }
 }

@@ -52,4 +52,25 @@ describe('AuthController', () => {
       expect(response.user.id).toBe('did:privy:sammy99');
     });
   });
+
+  describe('DELETE /auth/account', () => {
+    it('should soft-delete user and return success', async () => {
+      // First login/sync user
+      await controller.login({ authToken: 'test_token_sammy99' });
+
+      const mockReq = {
+        user: {
+          id: 'did:privy:sammy99',
+        },
+      };
+
+      const response = await controller.deleteAccount(mockReq);
+      expect(response.success).toBe(true);
+      expect(response.message).toBe('Account deleted successfully');
+
+      // Subsequent retrieval should return null
+      const userAfter = await authService.getUser('did:privy:sammy99');
+      expect(userAfter).toBeNull();
+    });
+  });
 });

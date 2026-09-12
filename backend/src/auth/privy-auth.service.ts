@@ -158,7 +158,7 @@ export class PrivyAuthService {
     // 2. If not found by ID, check by email to prevent duplicate key violations on unique email
     if (!existingUser && identity.email) {
       const rows = await this.dbService.query(
-        'SELECT * FROM "user" WHERE email = ?',
+        'SELECT * FROM "user" WHERE email = ? AND "deletedAt" IS NULL',
         [identity.email],
       );
       if (rows.length > 0) {
@@ -213,13 +213,54 @@ export class PrivyAuthService {
   }
 
   /**
-   * Retrieves a user from the database by Privy DID.
+   * Retrieves an active user from the database by Privy DID.
    */
   async getUser(userId: string): Promise<any> {
     const rows = await this.dbService.query(
-      'SELECT * FROM "user" WHERE id = ?',
+      'SELECT * FROM "user" WHERE id = ? AND "deletedAt" IS NULL',
       [userId],
     );
     return rows.length > 0 ? rows[0] : null;
+  }
+
+  /**
+   * Soft-deletes user account locally and deletes user in Privy Cloud.
+   * Preserves historical transaction receipts, execution logs, and mandates for on-chain auditability.
+   */
+  async deleteUserAccount(userId: string): Promise<{ success: boolean; message: string }> {
+    const user = await this.getUser(userId);
+    if (!user) {
+      throw new BadRequestException(`User ${userId} does not exist or is already deleted`);
+    }
+
+    const now = new Date().toISOString();
+
+    // 1. Soft-delete user in database
+    await this.dbService.run(
+      'UPDATE "user" SET "deletedAt" = ?, "updatedAt" = ? WHERE id = ?',
+      [now, now, userId],
+    );
+
+    // 2. Mark bound autonomous agents as INACTIVE
+    await this.dbService.run(
+      'UPDATE agent SET status = ?, "updatedAt" = ? WHERE "userId" = ?',
+      ['INACTIVE', now, userId],
+    );
+
+    // 3. Delete from Privy Cloud if PrivyClient is configured
+    if (this.privyClient) {
+      try {
+        this.logger.log(`Deleting user ${userId} from Privy Cloud...`);
+        await this.privyClient.deleteUser(userId);
+        this.logger.log(`Successfully deleted user ${userId} from Privy Cloud`);
+      } catch (err: any) {
+        this.logger.warn(`Failed to delete user ${userId} from Privy Cloud: ${err.message}`);
+      }
+    }
+
+    return {
+      success: true,
+      message: 'Account deleted successfully',
+    };
   }
 }

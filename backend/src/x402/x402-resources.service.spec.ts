@@ -1,16 +1,9 @@
 import { BadGatewayException, BadRequestException, NotFoundException } from '@nestjs/common';
 import { X402ResourcesService } from './x402-resources.service';
-import { X402Config } from './x402.config';
+import { loadX402Config } from './x402.config';
 
 describe('X402ResourcesService', () => {
-  const config: X402Config = {
-    network: 'eip155:84532',
-    facilitatorUrl: 'https://x402.org/facilitator',
-    usdcAddress: '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
-    payToAddress: '0x4087a2be5527867612424fF2b0B821318D4Dc2fa',
-    partnerPayToAddress: '0xbB55f3472773EAB736E5BCaC5FE6e6C5B30f5E35',
-    publicBaseUrl: 'https://chapter2-backend.onrender.com',
-  };
+  const config = loadX402Config();
 
   let service: X402ResourcesService;
   let fetchMock: jest.Mock;

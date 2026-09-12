@@ -47,6 +47,14 @@ services:
         sync: false
       - key: PUBLIC_BASE_URL
         value: https://chapter2-backend.onrender.com
+      - key: X402_APPROVED_PAY_TO
+        sync: false
+      - key: X402_AUTONOMOUS_LIMIT
+        value: "1000000"
+      - key: X402_DAILY_LIMIT
+        value: "5000000"
+      - key: LEDGER_APPROVER_ADDRESS
+        sync: false
 
 databases:
   - name: chapter2-postgres

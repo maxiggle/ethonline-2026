@@ -42,7 +42,7 @@ Ticket `CH2-CORE-001` transitions Chapter 2 from an ephemeral in-memory simulati
 
 ### D. x402 Payment Protocol (`backend/src/vendor/`)
 * **Module**: `VendorModule`
-* **Controller**: `VendorController` (`GET /vendor/compute`)
+* **Controller**: `VendorController` (`GET /vendor/compute`, `GET /vendor/bills/:id`, `GET /vendor/weather`)
 * **Service**: `VendorService`
 * **Protocol Challenge**:
   * Request without payment returns `HTTP 402 Payment Required` with headers:
@@ -51,11 +51,48 @@ Ticket `CH2-CORE-001` transitions Chapter 2 from an ephemeral in-memory simulati
     * `X-Payment-Token`: Approved token contract address
     * `X-Payment-ChainId`: Network chain ID (`84532`)
 * **Protocol Unlock**:
-  * Retrying with `X-Payment-TxHash: 0x...` validates the on-chain settlement and returns `HTTP 200 OK` with session tokens and dedicated GPU cluster allocations.
+  * Retrying with `X-Payment-TxHash: 0x...` redeems the payment (see section E) and returns `HTTP 200 OK` with session tokens and dedicated GPU cluster allocations.
+
+### E. x402 On-Chain Payment Verification & Replay Protection (SEC-004)
+Every x402 resource (`vendor:compute`, `vendor:weather`, and each `bill:<id>`) unlocks only after a
+verified ERC-20 transfer, and every tx hash can be redeemed exactly once, across all resources.
+
+* **Schema**: `x402_payment_receipts (tx_hash PK, resource, amount, redeemed_at)` in `DatabaseService`
+  (same dual-mode SQLite/PostgreSQL persistence as the other tables). Keys are lowercased. The insert
+  is `INSERT ... ON CONFLICT (tx_hash) DO NOTHING`, so a duplicate hash returns `changes: 0`.
+* **On-chain verification**: `OnChainExecutorService.verifyTokenTransfer(txHash, { token, recipient, minimumAmount })`
+  fetches the receipt, rejects a missing or reverted (`status !== 1`) receipt, decodes ERC-20
+  `Transfer` logs matching `token` and `to == recipient`, sums their `value`, and verifies only when
+  the sum is `>= minimumAmount`.
+* **`VendorService.redeemPayment(txHash, requirements, resourceId)`**: the single choke point for
+  unlocking any resource.
+  1. Rejects a malformed hash (`/^0x[0-9a-fA-F]{64}$/`) or a `chainId` mismatch.
+  2. Rejects a hash already present in `x402_payment_receipts`.
+  3. Calls `verifyTokenTransfer`; rejects on failure.
+  4. Inserts the receipt; a concurrent `changes: 0` is also rejected as a replay.
+  5. Returns the lowercased hash, used everywhere downstream instead of the caller-supplied one.
+* **Callers**: `verifyAndGrantAccess` (compute, resource `vendor:compute`), `getPaidWeatherTelemetry`
+  (weather, resource `vendor:weather`), and `settleBillWithPayment` (per-bill, resource `bill:<id>`,
+  idempotent for a repeat of the same hash, rejected for a different one once settled).
+* **`invokeService`** matches the resource by URL path exactly (404 on no match), validates params
+  (e.g. weather requires `city`) before proposing a payment, and returns a status union of
+  `SUCCESS | ESCALATED | BLOCKED | PENDING_SETTLEMENT` (`PENDING_SETTLEMENT` when the proposed action
+  has no `txHash` yet, since autonomous execution is asynchronous) instead of always reporting `SUCCESS`.
+
+**Known limitation**: replay protection is atomic only within a single backend instance. The
+in-memory `x402PaymentReceipts` map is checked and inserted synchronously, but the PostgreSQL
+`ON CONFLICT` write happens on a fire-and-forget background call (`asyncWriteToPostgres`). With
+several backend instances behind a load balancer, two instances could both pass the in-memory
+uniqueness check for the same hash before either write reaches Postgres, redeeming one payment
+twice. This is not fixed here; running multiple instances needs a synchronous, database-backed
+compare-and-insert instead.
 
 ---
 
 ## 3. Verification & Test Coverage
 * Automated tests run via `npm test` (`jest --runInBand --forceExit`).
-* **15 passed test suites, 125 passed tests**.
-* Tested directly against actual Base Sepolia RPC and deployed contracts without mock flags.
+* Covers duplicate-receipt rejection, `verifyTokenTransfer` (valid payment, wrong recipient, wrong
+  token, underpayment, reverted receipt, missing receipt), and `VendorController`/`VendorService`
+  redemption, replay, and settlement behavior.
+* `OnChainExecutorService`'s broadcasting spec is tested separately against live Base Sepolia RPC
+  and deployed contracts; it is excluded from routine runs (`--testPathIgnorePatterns on-chain-executor`).

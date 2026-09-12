@@ -25,7 +25,7 @@ class ApprovalCubit extends Cubit<ApprovalState> {
 
   Future<void> submitHardwareApproval({
     required String humanSignatureHex,
-    String? signerAddress,
+    required String signerAddress,
   }) async {
     final currentPayload = state.payload;
     if (currentPayload == null) {
@@ -41,14 +41,14 @@ class ApprovalCubit extends Cubit<ApprovalState> {
       final request = SubmitApprovalRequest(
         actionId: currentPayload.actionId,
         signature: humanSignatureHex,
-        signer: signerAddress ?? '0x0000000000000000000000000000000000041c4e',
+        signer: signerAddress,
         biometricVerified: true,
       );
 
       final result = await _apiService.approveAction(currentPayload.actionId, request);
       emit(state.copyWith(
         status: ApprovalStepStatus.approvedSuccess,
-        txHash: result.txHash ?? '0xMockTxHashExecutionSuccess',
+        txHash: result.txHash,
       ));
     } catch (e) {
       emit(state.copyWith(
@@ -56,5 +56,57 @@ class ApprovalCubit extends Cubit<ApprovalState> {
         errorMessage: e.toString(),
       ));
     }
+  }
+
+  /// Approves the pending escalation using the user's Privy embedded wallet via biometric Face ID.
+  Future<void> approveWithPrivyBiometrics({
+    required String walletAddress,
+    required String signature,
+  }) async {
+    final currentPayload = state.payload;
+    if (currentPayload == null) {
+      emit(state.copyWith(
+        status: ApprovalStepStatus.failure,
+        errorMessage: 'Missing approval payload',
+      ));
+      return;
+    }
+
+    if (walletAddress.isEmpty) {
+      emit(state.copyWith(
+        status: ApprovalStepStatus.failure,
+        errorMessage: 'Authenticated wallet address is required for biometric signing',
+      ));
+      return;
+    }
+
+    emit(state.copyWith(status: ApprovalStepStatus.biometricsPrompt));
+    emit(state.copyWith(status: ApprovalStepStatus.biometricsVerified));
+    emit(state.copyWith(status: ApprovalStepStatus.signing));
+
+    try {
+      final request = SubmitApprovalRequest(
+        actionId: currentPayload.actionId,
+        signature: signature,
+        signer: walletAddress,
+        biometricVerified: true,
+      );
+
+      final result = await _apiService.approveAction(currentPayload.actionId, request);
+      emit(state.copyWith(
+        status: ApprovalStepStatus.approvedSuccess,
+        txHash: result.txHash,
+      ));
+    } catch (e) {
+      emit(state.copyWith(
+        status: ApprovalStepStatus.failure,
+        errorMessage: e.toString(),
+      ));
+    }
+  }
+
+  /// Resets approval state back to idle.
+  void reset() {
+    emit(const ApprovalState());
   }
 }

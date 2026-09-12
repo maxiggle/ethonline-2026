@@ -63,7 +63,22 @@ void main() {
       final cubit = ApprovalCubit(apiService: MockApprovalApiService());
       cubit.initializeApproval(payload);
 
-      await cubit.submitHardwareApproval(humanSignatureHex: '0xValidSig');
+      await cubit.submitHardwareApproval(
+        humanSignatureHex: '0xValidSig',
+        signerAddress: '0xSigner',
+      );
+      expect(cubit.state.status, ApprovalStepStatus.approvedSuccess);
+      expect(cubit.state.txHash, '0xabc123success');
+    });
+
+    test('approveWithPrivyBiometrics transitions to approvedSuccess on valid API response', () async {
+      final cubit = ApprovalCubit(apiService: MockApprovalApiService());
+      cubit.initializeApproval(payload);
+
+      await cubit.approveWithPrivyBiometrics(
+        walletAddress: '0xPrivyWallet123',
+        signature: '0xBiometricSignature',
+      );
       expect(cubit.state.status, ApprovalStepStatus.approvedSuccess);
       expect(cubit.state.txHash, '0xabc123success');
     });

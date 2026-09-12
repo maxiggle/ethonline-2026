@@ -32,13 +32,14 @@ class LoginScreen extends StatelessWidget {
           final isLoading = state.status == AuthStatus.loading;
 
           return SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 32.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const Spacer(),
-                  // Brand Icon & Badge
+            child: Center(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 24.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const SizedBox(height: 12),
+                    // Brand Icon & Badge
                   Center(
                     child: Container(
                       width: 88,
@@ -106,7 +107,7 @@ class LoginScreen extends StatelessWidget {
                     subtitle: 'Enforce deterministic limits and AI guardian policies',
                   ),
 
-                  const Spacer(),
+                  const SizedBox(height: 32),
 
                   // Primary CTA: Sign In with Google via Privy
                   Container(
@@ -176,10 +177,11 @@ class LoginScreen extends StatelessWidget {
                 ],
               ),
             ),
-          );
-        },
-      ),
-    );
+          ),
+        );
+      },
+    ),
+  );
   }
 
   Widget _buildFeatureCard({

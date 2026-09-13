@@ -1,5 +1,7 @@
 # Mobile Scaffolding & Architecture Reference
 
+> **Outdated.** The app was restructured. See [mobile-ui-and-onboarding.md](mobile-ui-and-onboarding.md) and [mobile-services-tab.md](mobile-services-tab.md).
+
 ## Overview
 The **Chapter 2 Mobile Command Center** (`chapter2/`) provides an institutional supervisor interface for monitoring and authorizing autonomous AI treasury agent actions. The mobile application operates as the client layer over the on-chain Gnosis Safe guard (`Chapter2Guard.sol`), the supervisory NestJS backend, and the native hardware security layer.
 

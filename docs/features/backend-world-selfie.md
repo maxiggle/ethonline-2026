@@ -1,5 +1,7 @@
 # Feature Documentation: World ID Credential 11 (Selfie Check Beta) Service
 
+> **Note.** Live verification requires `WORLD_ID_MODE=CLOUD_API`; sandbox mode only runs in tests. Approvals don't require World ID yet: [world-id-approval-gate.md](../world-id-approval-gate.md).
+
 ## 1. Overview
 The **World ID Credential 11 Service** ([WorldSelfieService](file:///Users/godwinekainu/.gemini/antigravity-ide/scratch/ethonline-2026/backend/src/world/world-selfie.service.ts)) integrates decentralized proof-of-personhood into the Chapter 2 AI Guardian framework. It fulfills the World ID track requirements by binding autonomous agent operators and high-risk action authorizers to a verified, living human being via **Credential 11 ("Selfie Check Beta")**.
 

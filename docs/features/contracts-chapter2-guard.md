@@ -1,5 +1,7 @@
 # Feature Documentation: Chapter2Guard Smart Contracts
 
+> **Legacy.** This describes the original Safe / `Chapter2Guard` path. The backend no longer holds a relayer key, so this path doesn't broadcast transactions. Current architecture: [ARCHITECTURE.md](../ARCHITECTURE.md) · index: [features/README.md](README.md).
+
 ## Overview
 **Chapter2Guard** is an on-chain transaction guard designed for Gnosis Safe accounts operating autonomous AI treasuries. It enforces on-chain boundaries between an AI agent's proposals and actual fund movement:
 1. Routine operational payments within a defined threshold ($100 per transaction, $500 daily budget) to pre-approved recipients are executed autonomously without human friction.

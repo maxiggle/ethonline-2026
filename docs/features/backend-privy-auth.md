@@ -1,5 +1,7 @@
 # Privy Authentication, Dynamic Agent Binding & Account Lifecycle Management
 
+> **Partly outdated.** Automatic agent binding with the user's Privy wallet was removed; agents are bound explicitly. Current Privy usage: [docs/partners/privy](../partners/privy).
+
 ## 1. Overview
 Chapter 2 leverages **Privy** for seamless cryptographic identity management and institutional key provisioning. Every user is authenticated via Privy OAuth (Google or email) and receives an embedded EVM wallet address. This wallet serves as the user's primary supervisor key and bound autonomous agent identity, avoiding hardcoded fallback addresses.
 

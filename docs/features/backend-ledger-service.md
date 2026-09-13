@@ -1,5 +1,7 @@
 # Feature Documentation: Backend Ledger Key Ring Service
 
+> **Legacy.** This backend Ledger service belongs to the original `/actions` path. Current Ledger usage (Key Ring agent key, on-device approvals): [docs/partners/ledger](../partners/ledger).
+
 ## 1. Overview
 The **Backend Ledger Key Ring Service** ([LedgerKeyRingService](file:///Users/godwinekainu/.gemini/antigravity-ide/scratch/ethonline-2026/backend/src/ledger/ledger-keyring.service.ts)) acts as the final physical authority and headless secret management adapter for Chapter 2. It bridges autonomous AI treasury operations with hardware-enforced cryptographic boundaries.
 

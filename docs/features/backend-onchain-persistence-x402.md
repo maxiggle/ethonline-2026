@@ -1,5 +1,7 @@
 # Feature Documentation: Persistence, On-Chain Relayer, and x402 Payment Loop
 
+> **Partly outdated.** Persistence still applies. The on-chain relayer was removed (the executor is read-only), and the `/vendor/*` rail is legacy. Current architecture: [ARCHITECTURE.md](../ARCHITECTURE.md).
+
 ## 1. Overview
 Ticket `CH2-CORE-001` transitions Chapter 2 from an ephemeral in-memory simulation to a live, production-grade autonomous treasury management system. It delivers:
 1. **Dual-Mode Persistence (SQLite & PostgreSQL)**: Write-through persistence for actions, mandates, daily budget tracking, and World ID bindings with 0 data loss across service restarts.

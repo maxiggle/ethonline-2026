@@ -1,5 +1,7 @@
 # Feature Documentation: Backend API Gateway & WebSocket Event Stream
 
+> **Legacy.** This describes the original Safe / `Chapter2Guard` path. The backend no longer holds a relayer key, so this path doesn't broadcast transactions. Current architecture: [ARCHITECTURE.md](../ARCHITECTURE.md) · index: [features/README.md](README.md).
+
 ## 1. Overview
 The **Backend API Gateway & WebSocket Event Stream** provides the unified supervisory interface and real-time reactive transport for Chapter 2. It bridges autonomous AI treasury agents, the Guardian risk engine, World ID biometric proof-of-personhood, Ledger hardware clear-signing, and the Flutter mobile command center.
 

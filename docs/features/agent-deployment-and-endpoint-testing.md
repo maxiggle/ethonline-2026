@@ -1,5 +1,7 @@
 # Agent Deployment, Mandate Spending Caps & End-to-End Testing Walkthrough
 
+> **Legacy.** This describes the original Safe / `Chapter2Guard` path. The backend no longer holds a relayer key, so this path doesn't broadcast transactions. Current architecture: [ARCHITECTURE.md](../ARCHITECTURE.md) · index: [features/README.md](README.md).
+
 ## 1. Overview
 This document specifies the exact supervisory endpoints, execution flows, and end-to-end testing procedures for the **Chapter 2** institutional command center. It also details the step-by-step lifecycle of **deploying a new autonomous AI treasury agent and assigning its spending caps** across the smart contract guard (`Chapter2Guard.sol`), the supervisory backend (`backend/`), native hardware security (`packages/`), and the mobile command center (`chapter2/`).
 

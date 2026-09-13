@@ -1,5 +1,7 @@
 # Feature Documentation: End-to-End Integration Test Suite
 
+> **Legacy.** This describes the original Safe / `Chapter2Guard` path. The backend no longer holds a relayer key, so this path doesn't broadcast transactions. Current architecture: [ARCHITECTURE.md](../ARCHITECTURE.md) · index: [features/README.md](README.md).
+
 ## 1. Overview
 The **End-to-End Integration Test Suite** ([guardian-lifecycle.e2e.spec.ts](file:///Users/godwinekainu/.gemini/antigravity-ide/scratch/ethonline-2026/backend/src/integration/guardian-lifecycle.e2e.spec.ts)) provides multi-module validation of the entire Chapter 2 supervisory architecture. It exercises the end-to-end transaction pipeline from autonomous proposal intake through deterministic policy validation, multi-tier adversarial NLP risk evaluation, atomic balance reservations, real-time WebSocket alerting, hardware clear-signing, World ID biometric binding, and Gnosis Safe ABI execution payload encoding.
 

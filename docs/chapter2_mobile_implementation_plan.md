@@ -1,5 +1,7 @@
 # Implementation Plan: Chapter 2 (Sentinel AI Guardian)
 
+> **Historical plan.** Written before the hackathon pivot to x402 agent payments. Current architecture: [ARCHITECTURE.md](ARCHITECTURE.md).
+
 **Chapter 2** is an institutional-grade mobile command center that supervises autonomous AI agents operating a treasury.
 Project Location: `/Users/godwinekainu/.gemini/antigravity-ide/scratch/chapter2`
 

@@ -1,5 +1,7 @@
 # Feature Documentation: Backend AI Guardian Orchestrator
 
+> **Legacy.** This orchestrator belongs to the original `/actions` path. Its semantic risk analysis is reused by the current x402 spending policy. Current architecture: [ARCHITECTURE.md](../ARCHITECTURE.md).
+
 ## 1. Overview
 The **Backend AI Guardian Orchestrator** is a NestJS supervisory engine that acts as the intermediate evaluation layer between autonomous AI treasury agents and the on-chain Safe guard contracts. It ensures that every transaction proposed by an autonomous agent undergoes deterministic mathematical verification and multi-tier semantic adversarial analysis before being routed for execution or human escalation.
 

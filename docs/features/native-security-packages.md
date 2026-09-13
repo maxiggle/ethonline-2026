@@ -1,5 +1,7 @@
 # Native Security Packages: Hardware Key Rings & AgentKit Identity
 
+> **Prototype, not used.** These native packages aren't used by the app and aren't production security controls. See [ARCHITECTURE.md](../ARCHITECTURE.md).
+
 ## 1. Overview
 The `native_security/` module provides strongly-typed, hardware-isolated mobile bridges for iOS (Swift 6) and Android (Kotlin) in the Chapter 2 Guardian Mobile Command Center. It enforces hardware security boundaries to supervise autonomous AI treasury agents without relying on untyped dictionaries, generic object wrappers, or software-only private key storage.
 

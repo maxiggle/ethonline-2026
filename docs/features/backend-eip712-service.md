@@ -1,5 +1,7 @@
 # Feature Documentation: Backend EIP-712 Service
 
+> **Legacy.** This describes the original Safe / `Chapter2Guard` path. The backend no longer holds a relayer key, so this path doesn't broadcast transactions. Current architecture: [ARCHITECTURE.md](../ARCHITECTURE.md) · index: [features/README.md](README.md).
+
 ## 1. Overview
 The **Backend EIP-712 Service** (`Eip712Service`) is the cryptographic bridge between backend supervisory decisions and on-chain escalation enforcement in [Chapter2Guard.sol](file:///Users/godwinekainu/.gemini/antigravity-ide/scratch/ethonline-2026/contracts/src/Chapter2Guard.sol). When an autonomous AI proposal exceeds autonomous caps ($100 per action or $500 daily budget) or triggers elevated risk from the Asymmetric AI Guardian, it cannot be executed without typed cryptographic authorization from the authorized human owner/hardware key.
 

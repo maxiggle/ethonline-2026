@@ -81,25 +81,44 @@ flowchart LR
 - Only the Ledger can approve an escalated payment.
 - A payment counts as paid only once the transfer is verified on-chain.
 
+### Where each part runs today
+
+| Part | Runs on |
+|---|---|
+| Mobile app | Operators' and approvers' phones: sign-in, services, purchases, World ID, and Ledger approvals over Bluetooth |
+| Ledger | The approver's hardware wallet, connected to their phone |
+| Guardian backend | Render |
+| Agent worker | **A computer**, as a Node.js process (`npm --prefix scripts run agent:worker`) |
+
+**Why the agent isn't on the phone yet:**
+- **Ledger Key Ring:** the agent's key is protected by `wallet-cli ring`, a desktop command-line tool that talks to the Ledger over USB. It can't run inside a mobile app.
+- **Always on:** an agent has to keep running to pick up purchase requests, and mobile apps are paused in the background.
+
+### Next: the agent on the phone
+
+The goal is for everything to run on the phone:
+- **Hardware-protected key:** the app generates the agent key and encrypts it with the phone's secure hardware (Android Keystore / StrongBox, iOS Secure Enclave), unlocked with biometrics. On the phone, that replaces the Ledger Key Ring as the agent key's protection.
+- **Automatic binding:** the app knows its own agent address, so users no longer paste one.
+- **Payments in the app:** the x402 payment flow moves from `scripts/` into the app. Escalated payments are still approved on the Ledger.
+
 ## Partners
 
 | Partner | What it does in Chapter 2 | Details |
 |---|---|---|
 | **Ledger** | Key Ring protects the agent's wallet key. Humans approve big payments on the device (mobile Bluetooth and web WebHID). The backend only accepts Ledger-signed approvals. | [docs/partners/ledger](docs/partners/ledger) |
 | **Privy** | Google sign-in and an embedded EVM wallet for every user. Server-side token verification scopes agents, purchases and approvals to the right account. | [docs/partners/privy](docs/partners/privy) |
-| **World** | World ID Selfie Check proves a real, unique human stands behind the approver. The verification service is built; the approval gate waits on World granting access. | [docs/partners/world](docs/partners/world) |
+| **World** | World ID Orb verification binds a unique human to the Ledger approver. The Ledger signs the binding, and the backend can require it before accepting any approval. Deployed in World's staging environment. | [docs/partners/world](docs/partners/world) |
 
 ## Project status
 
 - **Live on Base Sepolia:** the Guardian backend, x402 services and service discovery on [chapter2-backend.onrender.com](https://chapter2-backend.onrender.com/discovery/resources).
 - **Built and tested:**
-  - the mobile app: Services, Ledger approvals, activity;
+  - the mobile app: Services, Ledger approvals, World ID, activity;
   - the agent worker with the Ledger Key Ring;
   - Ledger approvals over Bluetooth and WebHID;
-  - the purchase request queue.
-- **In progress:**
-  - live Ledger device testing with a remote tester;
-  - the World ID approval gate, pending World's Selfie Check access (see [docs/world-id-approval-gate.md](docs/world-id-approval-gate.md)).
+  - the purchase request queue;
+  - World ID Orb verification bound to the Ledger approver, with an approval gate behind `REQUIRE_WORLD_ID_FOR_ESCALATIONS` (deployed, World staging environment).
+- **In progress:** live testing with a remote tester's Ledger and World's simulator. The World ID gate stays off until the tester's Ledger is bound.
 
 ## For developers
 

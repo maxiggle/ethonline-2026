@@ -156,8 +156,12 @@ npm --prefix scripts run agent:worker
   - The spending policy (network, USDC asset, approved payee, per-payment and daily limits) runs before any payment signature exists.
   - Escalation typed data is checked against the Guardian's record (payer = Ledger, payee, amount, token, chain, expiry). The approval must recover to the Ledger address.
   - Settlement is confirmed by reading the USDC `Transfer` log on-chain. A purchase request is marked `PAID` only when the backend has verified that settlement.
-- **Human verification with World ID is designed but not enforced yet.** Escalated approvals currently require only the Ledger signature. The World ID Selfie Check verification service is built and tested, but World hasn't approved Selfie Check for this app, and enforcing it now would block every approval. See [world-id-approval-gate.md](world-id-approval-gate.md).
-- **The backend holds no signing keys.** `OnChainExecutorService` only reads Base Sepolia (settlement verification, contract state, balances), so the legacy Safe / `Chapter2Guard` execution path is disabled: `/actions` approvals are recorded but never broadcast. The Guard's former owner / `humanSigner` key was exposed; it stays in git history and must never hold funds.
+- **Human verification with World ID (Orb).**
+  - **How it works:** the approver completes World ID Orb verification, and the Ledger signs a binding to that verified World ID.
+  - **The gate:** with `REQUIRE_WORLD_ID_FOR_ESCALATIONS=true`, the backend refuses Ledger approvals unless the approver has an active binding. The variable has no default, and a partial `WORLD_ID_*` configuration stops the backend at startup.
+  - **Now:** deployed in World's staging environment, with the gate off until the live tester's Ledger is bound.
+  - **More:** [docs/partners/world](partners/world).
+- **The backend holds no signing keys.** `OnChainExecutorService` only reads Base Sepolia (settlement verification, contract state, balances), so the legacy Safe / `Chapter2Guard` execution path is disabled: `/actions` approvals are recorded but never broadcast. The deployed MockSafe and Guard are retired: their owner and `humanSigner` are an old development wallet, not the Ledger, so neither should be funded.
 - **Agent binding doesn't prove key control yet.** Anyone signed in can bind an address. A signed binding challenge is planned.
 - **Single-instance state:**
   - The agent-signature replay cache, purchase-request claim locks and escalation reasons awaiting typed data are held per backend instance.

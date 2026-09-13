@@ -2,60 +2,72 @@
 
 Chapter 2 lets AI agents pay for services on their own. Anything above the agent's limit needs a human to approve it on a Ledger.
 
-**World ID answers the question the Ledger can't: is a real, unique human behind that approval?** The goal is two independent proofs for every big agent payment:
+**World ID answers the question the Ledger can't: is a real, unique human behind that approval?** Every big agent payment can require two independent proofs:
 
-1. **World ID Selfie Check:** a unique, live human stands behind the approver identity.
+1. **World ID Orb verification:** a unique human stands behind the Ledger approver's address.
 2. **Ledger signature:** that same human physically holds the approver's key.
 
-A stolen or borrowed Ledger fails the World ID check. A verified human without the device can't sign.
+A stolen or borrowed Ledger doesn't carry the binding. A verified human without the device can't sign.
 
-Project overview: [README](../../../README.md)
+Project overview: [README](../../../README.md) · Feature doc: [`docs/features/world-id-orb-ledger-approver.md`](../../features/world-id-orb-ledger-approver.md)
 
 ## What's built
 
-### World ID verification service (backend)
-[`backend/src/world/world-selfie.service.ts`](../../../backend/src/world/world-selfie.service.ts):
+### Orb verification bound to the Ledger approver
+1. **Start:** in the app's **Approvals** screen, the approver taps **Verify with World ID**.
+   - The backend creates the World ID request with IDKit (`@worldcoin/idkit-core` 4.2.4, `orbLegacy` preset).
+   - The request's signal is the Ledger approver's address, and the request is signed with the app's RP signing key.
+2. **Verify:** the approver completes the request in World App, or in World's simulator in the staging environment.
+3. **Check:** the backend waits for the proof and forwards it to World's verify API (`/api/v4/verify/{rp_id}`). It accepts the proof only if:
+   - World's API verifies it;
+   - the credential is **Orb**;
+   - the action matches;
+   - the signal hash matches the Ledger approver's address;
+   - this World ID isn't already bound to a different address.
+4. **Bind:** the approver signs `chapter2-world-bind:<nullifier>` **on the Ledger** over Bluetooth.
+   - The backend accepts it only if the signature recovers to `LEDGER_APPROVER_ADDRESS`.
+   - The binding is stored for 90 days and refreshed by each approval.
 
-- **Live verification against World:** proofs are verified with World's Developer Portal verify API (v4) when `WORLD_ID_MODE=CLOUD_API`. The format-only sandbox mode is refused outside the test suite, so no proof is ever faked.
-- **Strong credentials only:** a proof must be **Selfie Check (credential 11)** or **Orb**. Weaker device-only credentials are rejected.
-- **Bound to the approver's wallet:** the proof's signal must equal the expected Ethereum address, so a proof can't be replayed for another signer.
-- **Anti-Sybil:** a World ID nullifier can be bound to only one Ethereum address. The same human can't back multiple approver identities.
-- **Lifecycle:** bindings are stored in `human_bindings`, stay valid for a 90-day inactivity window, are refreshed by approval activity, and can be revoked.
+Implementation:
+- [`world-id-approver.service.ts`](../../../backend/src/world/world-id-approver.service.ts)
+- [`world-id-approver.controller.ts`](../../../backend/src/world/world-id-approver.controller.ts)
+- [`world-id-request.client.ts`](../../../backend/src/world/world-id-request.client.ts)
+- [`world-id-verify.client.ts`](../../../backend/src/world/world-id-verify.client.ts)
+- App: [`world_id_approver_card.dart`](../../../chapter2/lib/features/x402_approvals/view/widgets/world_id_approver_card.dart) and [`world_id_approver_cubit.dart`](../../../chapter2/lib/features/world_id/cubit/world_id_approver_cubit.dart)
 
-### API
-[`backend/src/world/world.controller.ts`](../../../backend/src/world/world.controller.ts), all routes scoped to the signed-in Privy user:
+### The approval gate
+- **When enabled:** with `REQUIRE_WORLD_ID_FOR_ESCALATIONS=true`, the backend refuses any Ledger approval for an escalated payment (`403`) unless the approver has an active Orb binding. The app disables **Approve** until then.
+- **Rejections are never gated,** because refusing a payment can't move funds.
+- **Configuration:** there's no default. A partial World ID configuration stops the backend at startup instead of running without the check.
+
+### API (all routes require a signed-in Privy user)
 
 | Route | Purpose |
 |---|---|
-| `POST /world/selfie/verify` | Verify a World ID proof |
-| `POST /world/selfie/bind` | Bind a verified human to the signed-in wallet |
-| `GET /world/selfie/status/:signerAddress` | Whether an address has an active human binding |
-| `GET /world/selfie/bindings` | The caller's bindings |
-| `DELETE /world/selfie/bindings/:signerAddress` | Revoke a binding |
+| `GET /world/approver/status` | Whether World ID is required and configured, and whether the Ledger approver has an active Orb binding |
+| `POST /world/approver/orb-verifications` | Start an Orb verification; returns the World ID link (only to the user who started it) |
+| `GET /world/approver/orb-verifications/:requestId` | Verification progress |
+| `POST /world/approver/orb-verifications/:requestId/bind` | Bind the verified World ID to the Ledger approver with a Ledger signature |
 
 ### Tests
-[`backend/src/world/world-selfie.service.spec.ts`](../../../backend/src/world/world-selfie.service.spec.ts) has 17 tests:
-- accepted credentials (selfie and Orb);
-- rejection of device-only credentials;
-- signal tampering;
-- malformed proofs;
-- anti-Sybil replay;
-- the 90-day expiry and activity refresh;
-- revocation.
+- **Backend** (Jest, no network):
+  - configuration rules;
+  - every proof check (wrong signal, wrong credential, wrong action, World API errors, reuse by another address);
+  - binding errors (malformed or wrong signer, unknown request, not verified);
+  - overlapping-poll protection;
+  - the approval gate, run against the real payments service.
+- **App:** models, the verification cubit, and Ledger message signing.
+- **Live:** the compiled backend created a real request on World's staging service.
 
-### In the app
-Settings shows the signed-in wallet's World ID status from `GET /world/selfie/status/:signerAddress`. It never shows "verified" unless the backend says so.
-
-## The approval gate: designed, not yet enforced
-
-Full design and rollout plan: [`docs/world-id-approval-gate.md`](../../world-id-approval-gate.md)
-
-1. **Bind:** the approver completes Selfie Check in World App with the signal set to their Ledger approver address. The binding is also signed by that Ledger, which ties the World identity and the Ledger key to the same person.
-2. **Gate:** before accepting a Ledger approval for an escalated payment, the backend requires an active World ID binding for the approver address.
-3. **Enable deliberately:** configure World credentials, then set `REQUIRE_WORLD_ID_FOR_ESCALATIONS=true`, which has no default.
+### Why Orb rather than Selfie Check
+We first built for Selfie Check (credential 11). World restricts it: an app needs World to enable it, even for sandbox testing. We requested access and asked in the ETHOnline partner Discord channel, but nobody responded before the deadline. Orb needs no extra approval, and it's the stronger credential. The earlier Selfie Check service ([`world-selfie.service.ts`](../../../backend/src/world/world-selfie.service.ts)) stays in the repo, and the approval gate doesn't use it.
 
 ## Status
+- **Deployed:** the backend is live on Render with World ID in the **staging** environment.
+- **Live end-to-end test in progress:** with a remote tester's Ledger and World's simulator. The gate is switched off until the tester's Ledger is bound, then switched on.
+- **Staging identities are test identities,** not real people. Production needs `WORLD_ID_ENVIRONMENT=production` and an Orb-verified approver in World App.
 
-- **Built and tested:** the verification service, binding with anti-Sybil protection and lifecycle, the API, and the app's status display.
-- **Waiting on World:** Selfie Check is restricted, and World must enable it for an app, even for sandbox testing. We requested access, and it's pending.
-- **Why the gate is off:** until access is granted, live verification is disabled on the deployed backend. Escalated approvals currently require the Ledger signature only. Enforcing the gate now would block every approval, and faking verification is against the project's zero-fallback rules.
+## Feedback for World
+- **Selfie Check can't be tested without approval.** Even Sandbox requires the feature to be enabled for the app, and Sandbox app access needs a separate approval. There was no self-serve path during the hackathon, and no response to our access request.
+- **Test environment docs disagree.** The integration guide says to test with `environment: "staging"` and the simulator; the Sandbox guide says `environment: sandbox`.
+- **IDKit doesn't run in Node out of the box.** `IDKit.request()` loads its WASM file by calling `fetch()` on a `file:` URL, which Node's `fetch` rejects (`Failed to initialize IDKit WASM: TypeError: fetch failed`). We serve that one file from disk with a small shim ([`idkit-node-wasm-loader.ts`](../../../backend/src/world/idkit-node-wasm-loader.ts)).

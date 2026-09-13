@@ -9,7 +9,7 @@ For the product overview see the [README](../README.md). For setup see [developm
 | | Management layer (humans) | Agent layer (the AI agent) |
 |---|---|---|
 | **Who** | Company operator / approver | Autonomous agent worker |
-| **Runs on** | Phone ([`chapter2/`](../chapter2)), Guardian backend ([`backend/`](../backend)), Ledger device, web console ([`approval-console/`](../approval-console)) | The agent's machine ([`scripts/`](../scripts)) |
+| **Runs on** | Phone ([`chapter2/`](../chapter2)), Guardian backend ([`backend/`](../backend)), Ledger device, web console ([`approval-console/`](../approval-console)) | A computer running the Node.js worker ([`scripts/`](../scripts)), not the phone yet: see [Where each part runs today](../README.md#where-each-part-runs-today) |
 | **Identity** | Privy login with an embedded EVM wallet; Ledger approver address | Agent wallet whose key is protected by the Ledger Key Ring |
 | **Does** | Binds the agent, picks services, approves or rejects escalations, sees activity | Claims purchase requests, asks the Guardian, pays x402 services, reports settlement |
 | **Never holds** | The agent's key | The approver's key |
@@ -34,7 +34,7 @@ Feature docs: [mobile-services-tab.md](features/mobile-services-tab.md), [mobile
 | `vendor/` | Bazaar discovery: `GET /discovery/resources` and `/discovery/search` |
 | `auth/` | Privy token verification, user sync, account deletion, `PrivyAuthGuard` |
 | `agents/` | Agent binding: reactivation, conflict checks, ownership checks |
-| `world/` | World ID Selfie Check verification and human binding (not enforced on approvals yet) |
+| `world/` | World ID Orb verification bound to the Ledger approver (`/world/approver/*`), and the approval gate behind `REQUIRE_WORLD_ID_FOR_ESCALATIONS`. The earlier Selfie Check service (`/world/selfie/*`) isn't used by the gate |
 | `blockchain/` | `OnChainExecutorService`, **read-only**: settlement verification, contract reads, balances |
 | `database/` | Postgres on Render with an in-memory mirror (file persistence in tests) |
 | `gateway/` | WebSocket events for action lifecycle |
@@ -110,9 +110,11 @@ sequenceDiagram
 5. **Settlement is verified on-chain,** by reading the USDC `Transfer` log from the transaction receipt.
 6. **Users only see their own data.** Privy identity scopes agents and purchase requests.
 
-**Designed, not yet enforced:**
-- **World ID approval gate:** see [world-id-approval-gate.md](world-id-approval-gate.md).
+**World ID approval gate:** with `REQUIRE_WORLD_ID_FOR_ESCALATIONS=true`, an approval is also refused unless the Ledger approver has an active World ID Orb binding, signed by that Ledger. See [docs/partners/world](partners/world).
+
+**Designed, not built:**
 - **Signed agent-binding challenge:** binding an agent doesn't yet prove key control.
+- **Agent on the phone:** see [Next: the agent on the phone](../README.md#next-the-agent-on-the-phone).
 
 ## 5. API map
 
@@ -144,7 +146,10 @@ sequenceDiagram
   - Start: `npm run start:prod`.
   - Required x402 environment is listed in [development.md](development.md).
 - **Network:** Base Sepolia (chain 84532). Payments are settled by `https://x402.org/facilitator`.
-- **Legacy contracts:** `Chapter2Guard` `0x9b6023D1B6D3b076C8d999Ba406AE486750ce7d3` and MockSafe `0x4f712dd78Cb1a504C69CB4f68B82Fddb6b3b1df6`. The backend only reads them; the Guard's former owner key was exposed and is burned.
+- **Retired contracts:** `Chapter2Guard` `0x9b6023D1B6D3b076C8d999Ba406AE486750ce7d3` and the MockSafe treasury `0x4f712dd78Cb1a504C69CB4f68B82Fddb6b3b1df6`, from the original on-chain design. They play no part in x402 payments, and the backend only reads them.
+  - **Payments can't come from them:** x402 payments need an EIP-3009 signature from the USDC holder, which a contract can't produce.
+  - **They aren't configured for use:** their owner and human-signer roles belong to an old development wallet, not the Ledger, and USDC isn't an approved token.
+  - **Don't fund them.** Moving the treasury into the product needs a redeploy with the Ledger as owner and human signer.
 - **Mobile:** the Flutter app defaults to `BACKEND_BASE_URL=https://chapter2-backend.onrender.com`.
 
 ## 8. Engineering rules

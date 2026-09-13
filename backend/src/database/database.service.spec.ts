@@ -100,14 +100,15 @@ describe('DatabaseService', () => {
   it('should store and sign an x402 escalation', async () => {
     const actionId = `act_test_${Date.now()}`;
     await service.run(
-      `INSERT INTO x402_escalations (action_id, resource_url, typed_data, signature, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [actionId, 'https://example.com/x402/chain-report', '{"primaryType":"TransferWithAuthorization"}', null, 'AWAITING_SIGNATURE', new Date().toISOString(), new Date().toISOString()],
+      `INSERT INTO x402_escalations (action_id, resource_url, typed_data, reasons, signature, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [actionId, 'https://example.com/x402/chain-report', '{"primaryType":"TransferWithAuthorization"}', '["Amount exceeds the autonomous limit"]', null, 'AWAITING_SIGNATURE', new Date().toISOString(), new Date().toISOString()],
     );
 
     const created = await service.getOne('SELECT * FROM x402_escalations WHERE action_id = ?', [actionId]);
     expect(created).toBeDefined();
     expect(created.status).toBe('AWAITING_SIGNATURE');
     expect(created.signature).toBeNull();
+    expect(JSON.parse(created.reasons)).toEqual(['Amount exceeds the autonomous limit']);
 
     const updateResult = await service.run(
       `UPDATE x402_escalations SET status = ?, signature = ?, updated_at = ? WHERE action_id = ?`,

@@ -163,11 +163,14 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
         action_id VARCHAR(128) PRIMARY KEY,
         resource_url TEXT NOT NULL,
         typed_data TEXT NOT NULL,
+        reasons TEXT NOT NULL DEFAULT '[]',
         signature TEXT,
         status VARCHAR(32) NOT NULL,
         created_at TIMESTAMPTZ NOT NULL,
         updated_at TIMESTAMPTZ NOT NULL
       );
+
+      ALTER TABLE x402_escalations ADD COLUMN IF NOT EXISTS reasons TEXT NOT NULL DEFAULT '[]';
 
       CREATE TABLE IF NOT EXISTS "user" (
         id VARCHAR(128) PRIMARY KEY,
@@ -664,11 +667,12 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
 
     // 6. x402 Escalations
     if (s.includes('INTO X402_ESCALATIONS')) {
-      const [action_id, resource_url, typed_data, signature, status, created_at, updated_at] = params;
+      const [action_id, resource_url, typed_data, reasons, signature, status, created_at, updated_at] = params;
       this.state.x402Escalations.set(action_id, {
         action_id,
         resource_url,
         typed_data,
+        reasons,
         signature: signature || null,
         status,
         created_at: String(created_at),

@@ -56,6 +56,7 @@ export interface X402EscalationRow {
   action_id: string;
   resource_url: string;
   typed_data: string; // JSON string
+  reasons: string; // JSON string array of the spending policy's escalation reasons
   signature: string | null;
   status: 'AWAITING_SIGNATURE' | 'SIGNED' | 'REJECTED';
   created_at: string;

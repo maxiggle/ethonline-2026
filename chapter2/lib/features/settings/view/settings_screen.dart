@@ -1,523 +1,162 @@
 import 'package:auto_route/auto_route.dart';
-import 'package:chapter2/features/agents/view/add_agent_sheet.dart';
-import 'package:chapter2/features/agents/view/agent_detail_screen.dart';
+import 'package:chapter2/core/config/app_config.dart';
+import 'package:chapter2/core/di/locator.dart';
 import 'package:chapter2/features/auth/cubit/auth_cubit.dart';
 import 'package:chapter2/features/auth/cubit/auth_state.dart';
 import 'package:chapter2/router/app_router.dart';
+import 'package:chapter2/services/api/chapter2_api_service.dart';
+import 'package:chapter2/services/api/models/world_id_status.dart';
+import 'package:chapter2/features/x402_approvals/cubit/x402_approvals_cubit.dart';
+import 'package:chapter2/features/x402_approvals/cubit/x402_approvals_state.dart';
 import 'package:chapter2/shared/theme/chapter2_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 
-class SettingsScreen extends StatelessWidget {
-  const SettingsScreen({super.key, this.onSignOut});
+enum _WorldIdLoadStatus { loading, loaded, unavailable }
 
-  final VoidCallback? onSignOut;
+@RoutePage()
+class SettingsScreen extends StatefulWidget {
+  const SettingsScreen({super.key});
+
+  @override
+  State<SettingsScreen> createState() => _SettingsScreenState();
+}
+
+class _SettingsScreenState extends State<SettingsScreen> {
+  _WorldIdLoadStatus _worldIdStatus = _WorldIdLoadStatus.loading;
+  WorldIdStatus? _worldId;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<X402ApprovalsCubit>().loadConfig();
+      _loadWorldIdStatus();
+    });
+  }
+
+  Future<void> _loadWorldIdStatus() async {
+    final walletAddress = context.read<AuthCubit>().state.user?.walletAddress;
+    if (walletAddress == null || walletAddress.isEmpty) {
+      setState(() => _worldIdStatus = _WorldIdLoadStatus.unavailable);
+      return;
+    }
+    try {
+      final status = await locator<Chapter2ApiService>().fetchWorldIdStatus(walletAddress);
+      if (!mounted) return;
+      setState(() {
+        _worldId = status;
+        _worldIdStatus = _WorldIdLoadStatus.loaded;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _worldIdStatus = _WorldIdLoadStatus.unavailable);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.screenBackground,
-      appBar: AppBar(
-        title: Text(
-          'Settings & Infrastructure',
-          style: AppTextStyles.xl(context, color: Colors.white),
-        ),
-      ),
+      backgroundColor: AppColors.background,
+      appBar: AppBar(title: const Text('Settings')),
       body: BlocBuilder<AuthCubit, AuthState>(
         builder: (context, authState) {
           final user = authState.user;
           final wallet = user?.walletAddress ?? '';
-          final agents = authState.agents;
-          final activeAgent = agents.isNotEmpty ? agents.first : null;
-          final safeAddr =
-              activeAgent?.safeAddress ??
-              '0x4f712dd78Cb1a504C69CB4f68B82Fddb6b3b1df6';
-          final guardAddr =
-              activeAgent?.guardAddress ??
-              '0x9b6023D1B6D3b076C8d999Ba406AE486750ce7d3';
 
           return SingleChildScrollView(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // Identity & Biometric Section
                 _buildSectionCard(
                   context,
-                  title: 'Connected Identity',
+                  title: 'Account',
                   icon: Icons.person_pin_rounded,
                   children: [
+                    _buildInfoRow(context, 'Name', user?.name ?? 'Not set'),
+                    const Divider(height: 16, color: AppColors.border),
+                    _buildInfoRow(context, 'Email', user?.email ?? 'Not set'),
+                    const Divider(height: 16, color: AppColors.border),
                     _buildInfoRow(
                       context,
-                      'Operator Email',
-                      user?.email ?? 'operator@chapter2.finance',
-                    ),
-                    const Divider(height: 16, color: AppColors.cardBorder),
-                    _buildInfoRow(
-                      context,
-                      'Privy Embedded EVM',
-                      wallet.isNotEmpty ? wallet : 'Generating wallet...',
-                      isMonospace: true,
+                      'Privy wallet',
+                      wallet.isNotEmpty ? wallet : 'Not available',
+                      isMonospace: wallet.isNotEmpty,
                       canCopy: wallet.isNotEmpty,
                     ),
-                    const Divider(height: 16, color: AppColors.cardBorder),
-                    _buildInfoRow(
-                      context,
-                      'Privy DID',
-                      user?.id ?? 'did:privy:anonymous',
-                      isMonospace: true,
-                      canCopy: true,
-                    ),
-                    const Divider(height: 16, color: AppColors.cardBorder),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          'World ID Verification',
-                          style: AppTextStyles.sm(
-                            context,
-                            color: AppColors.textSecondary,
-                          ),
-                        ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 3,
-                          ),
-                          decoration: BoxDecoration(
-                            color: AppColors.allowBackground,
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: AppColors.allowBorder),
-                          ),
-                          child: Row(
-                            children: [
-                              const Icon(
-                                Icons.verified_user_rounded,
-                                size: 13,
-                                color: AppColors.allow,
-                              ),
-                              const SizedBox(width: 4),
-                              Text(
-                                'Verified Human (Orb)',
-                                style: AppTextStyles.xs(
-                                  context,
-                                  color: AppColors.allowText,
-                                  fontWeight: AppTextStyles.bold,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
                   ],
                 ),
                 const SizedBox(height: 16),
-                // Autonomous AI Agents Section
                 _buildSectionCard(
                   context,
-                  title: 'Autonomous AI Agents',
-                  icon: Icons.smart_toy_rounded,
+                  title: 'Backend',
+                  icon: Icons.dns_rounded,
                   children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              activeAgent?.name ?? 'Autonomous Treasury Agent',
-                              style: AppTextStyles.md(
-                                context,
-                                color: Colors.white,
-                                fontWeight: AppTextStyles.bold,
-                              ),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              'Supervised Worker • Gnosis Safe',
-                              style: AppTextStyles.xs(
-                                context,
-                                color: AppColors.textSecondary,
-                              ),
-                            ),
-                          ],
-                        ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 3,
-                          ),
-                          decoration: BoxDecoration(
-                            color: AppColors.allowBackground,
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: AppColors.allowBorder),
-                          ),
-                          child: Row(
-                            children: [
-                              Container(
-                                width: 6,
-                                height: 6,
-                                decoration: const BoxDecoration(
-                                  color: AppColors.allow,
-                                  shape: BoxShape.circle,
-                                ),
-                              ),
-                              const SizedBox(width: 5),
-                              Text(
-                                activeAgent?.status ?? 'ACTIVE',
-                                style: AppTextStyles.xs(
-                                  context,
-                                  color: AppColors.allowText,
-                                  fontWeight: AppTextStyles.bold,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                    const Divider(height: 16, color: AppColors.cardBorder),
-                    _buildInfoRow(
-                      context,
-                      'Agent Address',
-                      activeAgent?.agentAddress ?? wallet,
-                      isMonospace: true,
-                      canCopy: true,
-                    ),
-                    const Divider(height: 16, color: AppColors.cardBorder),
-                    InkWell(
-                      onTap: () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => const AgentDetailScreen(),
-                          ),
-                        );
+                    _buildInfoRow(context, 'Base URL', AppConfig.backendBaseUrl),
+                    const Divider(height: 16, color: AppColors.border),
+                    BlocBuilder<X402ApprovalsCubit, X402ApprovalsState>(
+                      builder: (context, state) {
+                        if (state.config != null) {
+                          return _buildInfoRow(
+                            context,
+                            'Ledger approver',
+                            state.config!.approverAddress,
+                            isMonospace: true,
+                            canCopy: true,
+                          );
+                        }
+                        if (state.status == X402ApprovalsStatus.failure) {
+                          return _buildErrorRow(
+                            context,
+                            state.errorMessage ?? 'Could not load the approver config.',
+                            onRetry: () => context.read<X402ApprovalsCubit>().loadConfig(),
+                          );
+                        }
+                        return _buildLoadingRow(context, 'Loading approver config...');
                       },
-                      borderRadius: BorderRadius.circular(8),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 6.0),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Row(
-                              children: [
-                                const Icon(
-                                  Icons.tune_rounded,
-                                  size: 16,
-                                  color: AppColors.brandPrimary,
-                                ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  'Manage Agents & Guard Policies',
-                                  style: AppTextStyles.sm(
-                                    context,
-                                    color: Colors.white,
-                                    fontWeight: AppTextStyles.medium,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            Row(
-                              children: [
-                                Text(
-                                  '${agents.length} Registered',
-                                  style: AppTextStyles.xs(
-                                    context,
-                                    color: AppColors.brandPrimary,
-                                  ),
-                                ),
-                                const SizedBox(width: 4),
-                                const Icon(
-                                  Icons.arrow_forward_ios_rounded,
-                                  size: 12,
-                                  color: AppColors.brandPrimary,
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const Divider(height: 16, color: AppColors.cardBorder),
-                    InkWell(
-                      onTap: () => AddAgentSheet.show(context),
-                      borderRadius: BorderRadius.circular(8),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 6.0),
-                        child: Row(
-                          children: [
-                            const Icon(
-                              Icons.add_circle_outline_rounded,
-                              size: 16,
-                              color: AppColors.allow,
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              'Spawn New Autonomous Agent',
-                              style: AppTextStyles.sm(
-                                context,
-                                color: AppColors.allow,
-                                fontWeight: AppTextStyles.semiBold,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 16),
-                // Smart Contracts & Network
                 _buildSectionCard(
                   context,
-                  title: 'Smart Contract Infrastructure',
-                  icon: Icons.account_balance_wallet_rounded,
-                  children: [
-                    _buildInfoRow(
-                      context,
-                      'Execution Network',
-                      'Base Sepolia (Chain ID 84532)',
-                      isHighlight: true,
-                    ),
-                    const Divider(height: 16, color: AppColors.cardBorder),
-                    _buildInfoRow(
-                      context,
-                      'Gnosis Safe Multisig',
-                      safeAddr,
-                      isMonospace: true,
-                      canCopy: true,
-                    ),
-                    const Divider(height: 16, color: AppColors.cardBorder),
-                    _buildInfoRow(
-                      context,
-                      'Chapter2Guard Hook',
-                      guardAddr,
-                      isMonospace: true,
-                      canCopy: true,
-                    ),
-                    const Divider(height: 16, color: AppColors.cardBorder),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          'RPC Endpoint Status',
-                          style: AppTextStyles.sm(
-                            context,
-                            color: AppColors.textSecondary,
-                          ),
-                        ),
-                        Row(
-                          children: [
-                            Container(
-                              width: 8,
-                              height: 8,
-                              decoration: const BoxDecoration(
-                                color: AppColors.allow,
-                                shape: BoxShape.circle,
-                              ),
-                            ),
-                            const SizedBox(width: 6),
-                            Text(
-                              'Live (Alchemy 38ms)',
-                              style: AppTextStyles.xs(
-                                context,
-                                color: AppColors.allowText,
-                                fontWeight: AppTextStyles.semiBold,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ],
+                  title: 'World ID',
+                  icon: Icons.verified_user_rounded,
+                  children: [_buildWorldIdRow(context)],
                 ),
                 const SizedBox(height: 16),
-                // Hardware & Security Policies
-                _buildSectionCard(
-                  context,
-                  title: 'Hardware & Security',
-                  icon: Icons.shield_rounded,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          'Ledger Hardware Signer',
-                          style: AppTextStyles.sm(
-                            context,
-                            color: AppColors.textSecondary,
-                          ),
-                        ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 3,
-                          ),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFFFF4ED),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: const Color(0xFFFFD6B8)),
-                          ),
-                          child: Row(
-                            children: [
-                              const Icon(
-                                Icons.bluetooth_connected_rounded,
-                                size: 13,
-                                color: AppColors.ledgerOrange,
-                              ),
-                              const SizedBox(width: 4),
-                              Text(
-                                'Nano X (BLE Ready)',
-                                style: AppTextStyles.xs(
-                                  context,
-                                  color: AppColors.ledgerOrange,
-                                  fontWeight: AppTextStyles.bold,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                    const Divider(height: 16, color: AppColors.cardBorder),
-                    _buildInfoRow(
-                      context,
-                      'Guardian Engine Version',
-                      'Chapter2 Guard v1.0.4-sepolia',
-                    ),
-                    const Divider(height: 16, color: AppColors.cardBorder),
-                    _buildInfoRow(
-                      context,
-                      'Policy Synchronization',
-                      'Continuous Real-Time Webhook',
-                    ),
-                    const Divider(height: 16, color: AppColors.cardBorder),
-                    InkWell(
-                      onTap: () {
-                        context.router.push(OnboardingRoute());
-                      },
-                      borderRadius: BorderRadius.circular(8),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 4.0),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              'Review Onboarding Wizard',
-                              style: AppTextStyles.sm(
-                                context,
-                                color: Colors.white,
-                              ),
-                            ),
-                            Row(
-                              children: [
-                                Text(
-                                  '4 Steps',
-                                  style: AppTextStyles.xs(
-                                    context,
-                                    color: AppColors.brandPrimary,
-                                  ),
-                                ),
-                                const SizedBox(width: 4),
-                                const Icon(
-                                  Icons.arrow_forward_ios_rounded,
-                                  size: 12,
-                                  color: AppColors.brandPrimary,
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                // Danger Zone / Account Deletion
                 _buildSectionCard(
                   context,
                   title: 'Account & Privacy',
                   icon: Icons.shield_outlined,
                   children: [
                     Text(
-                      'Permanently remove your identity from Privy Cloud and deactivate all autonomous agents. Historical transaction records, audit receipts, and on-chain proofs remain preserved on Base Sepolia.',
-                      style: AppTextStyles.xs(
-                        context,
-                        color: AppColors.textSecondary,
-                      ),
+                      'Historical transaction records and on-chain proofs remain preserved on Base Sepolia after deletion.',
+                      style: AppTextStyles.xs(context, color: AppColors.textSecondary),
                     ),
                     const SizedBox(height: 14),
                     OutlinedButton(
                       onPressed: () => _showDeleteConfirmation(context),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: AppColors.block,
-                        side: const BorderSide(color: AppColors.blockBorder),
-                        backgroundColor: AppColors.blockBackground,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
-                        ),
+                        side: BorderSide(color: AppColors.blockBorder),
                       ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const Icon(
-                            Icons.delete_forever_rounded,
-                            size: 18,
-                            color: AppColors.block,
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            'Delete Account & Deactivate Agents',
-                            style: AppTextStyles.sm(
-                              context,
-                              color: AppColors.block,
-                              fontWeight: AppTextStyles.bold,
-                            ),
-                          ),
-                        ],
-                      ),
+                      child: const Text('Delete account'),
                     ),
                   ],
                 ),
                 const SizedBox(height: 16),
-                // Sign Out Button
-                ElevatedButton(
+                ElevatedButton.icon(
                   onPressed: () async {
                     await context.read<AuthCubit>().logout();
-                    onSignOut?.call();
+                    if (context.mounted) {
+                      context.router.replaceAll([LoginRoute()]);
+                    }
                   },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.screenBackgroundElevated,
-                    foregroundColor: AppColors.textLight,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                      side: const BorderSide(color: AppColors.actionPillBorder),
-                    ),
-                    elevation: 0,
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(
-                        Icons.logout_rounded,
-                        size: 18,
-                        color: AppColors.textPrimary,
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        'Disconnect Session & Sign Out',
-                        style: AppTextStyles.md(
-                          context,
-                          color: AppColors.textPrimary,
-                          fontWeight: AppTextStyles.bold,
-                        ),
-                      ),
-                    ],
-                  ),
+                  icon: const Icon(Icons.logout_rounded, size: 18),
+                  label: const Text('Sign out'),
                 ),
                 const SizedBox(height: 28),
               ],
@@ -528,154 +167,82 @@ class SettingsScreen extends StatelessWidget {
     );
   }
 
-  Future<void> _showDeleteConfirmation(BuildContext context) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        backgroundColor: AppColors.cardSurfacePure,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-          side: const BorderSide(color: AppColors.cardBorder),
-        ),
-        title: Row(
+  Widget _buildWorldIdRow(BuildContext context) {
+    switch (_worldIdStatus) {
+      case _WorldIdLoadStatus.loading:
+        return _buildLoadingRow(context, 'Checking World ID status...');
+      case _WorldIdLoadStatus.unavailable:
+        return Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: AppColors.blockBackground,
-                shape: BoxShape.circle,
-                border: Border.all(color: AppColors.blockBorder),
-              ),
-              child: const Icon(
-                Icons.warning_rounded,
-                color: AppColors.block,
-                size: 20,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Text(
-              'Delete Account?',
-              style: AppTextStyles.lg(
-                dialogContext,
-                color: Colors.white,
-                fontWeight: AppTextStyles.bold,
-              ),
-            ),
+            Text('Status', style: AppTextStyles.sm(context, color: AppColors.textSecondary)),
+            Text('Not configured', style: AppTextStyles.sm(context, fontWeight: AppTextStyles.semiBold)),
           ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
+        );
+      case _WorldIdLoadStatus.loaded:
+        final isVerified = _worldId?.isVerified ?? false;
+        return Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(
-              'Are you sure you want to delete your Chapter2 account? Your autonomous agent will be deactivated, and your account will be removed from Privy Cloud.',
-              style: AppTextStyles.sm(
-                dialogContext,
-                color: AppColors.textPrimary,
-              ),
-            ),
-            const SizedBox(height: 12),
+            Text('Status', style: AppTextStyles.sm(context, color: AppColors.textSecondary)),
             Container(
-              padding: const EdgeInsets.all(12),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
               decoration: BoxDecoration(
-                color: AppColors.screenBackground,
+                color: isVerified ? AppColors.allowBackground : AppColors.surfaceRaised,
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppColors.cardBorder),
+                border: Border.all(color: isVerified ? AppColors.allowBorder : AppColors.border),
               ),
               child: Text(
-                'Audit Guarantee: Historical on-chain execution receipts and audit logs will remain intact on Base Sepolia.',
+                isVerified ? 'Verified' : 'Not verified',
                 style: AppTextStyles.xs(
-                  dialogContext,
-                  color: AppColors.textSecondary,
+                  context,
+                  color: isVerified ? AppColors.allowText : AppColors.textSecondary,
+                  fontWeight: AppTextStyles.bold,
                 ),
               ),
             ),
           ],
+        );
+    }
+  }
+
+  Future<void> _showDeleteConfirmation(BuildContext context) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Delete account?'),
+        content: const Text(
+          'Your autonomous agent will be deactivated and your account removed from Privy Cloud.',
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: Text(
-              'Cancel',
-              style: AppTextStyles.sm(
-                dialogContext,
-                color: AppColors.textSecondary,
-              ),
-            ),
+            child: const Text('Cancel'),
           ),
           ElevatedButton(
             onPressed: () => Navigator.of(dialogContext).pop(true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.block,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              elevation: 0,
-            ),
-            child: Text(
-              'Delete Account',
-              style: AppTextStyles.sm(
-                dialogContext,
-                color: Colors.white,
-                fontWeight: AppTextStyles.bold,
-              ),
-            ),
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.block),
+            child: const Text('Delete account'),
           ),
         ],
       ),
     );
 
-    if (confirmed == true && context.mounted) {
-      try {
+    if (confirmed != true || !context.mounted) return;
+
+    try {
+      await context.read<AuthCubit>().deleteAccount();
+      if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Row(
-              children: [
-                SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: Colors.white,
-                  ),
-                ),
-                SizedBox(width: 12),
-                Text('Deleting account and deactivating agent...'),
-              ],
-            ),
-            duration: Duration(seconds: 10),
-            backgroundColor: AppColors.cardSurfacePure,
-            behavior: SnackBarBehavior.floating,
-          ),
+          const SnackBar(content: Text('Account deleted successfully')),
         );
-
-        await context.read<AuthCubit>().deleteAccount();
-
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).hideCurrentSnackBar();
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Account deleted successfully'),
-              backgroundColor: AppColors.allow,
-              behavior: SnackBarBehavior.floating,
-            ),
-          );
-          onSignOut?.call();
-          context.router.replaceAll([LoginRoute()]);
-        }
-      } catch (e) {
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).hideCurrentSnackBar();
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Failed to delete account: $e'),
-              backgroundColor: AppColors.block,
-              behavior: SnackBarBehavior.floating,
-            ),
-          );
-        }
+        context.router.replaceAll([LoginRoute()]);
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to delete account: $e')),
+        );
       }
     }
   }
@@ -689,24 +256,18 @@ class SettingsScreen extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: AppColors.cardSurfacePure,
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: AppColors.cardBorder),
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Icon(icon, size: 18, color: AppColors.brandPrimary),
+              Icon(icon, size: 18, color: AppColors.primary),
               const SizedBox(width: 8),
-              Text(
-                title,
-                style: AppTextStyles.md(
-                  context,
-                  fontWeight: AppTextStyles.bold,
-                ),
-              ),
+              Text(title, style: AppTextStyles.md(context, fontWeight: AppTextStyles.bold)),
             ],
           ),
           const SizedBox(height: 14),
@@ -721,7 +282,6 @@ class SettingsScreen extends StatelessWidget {
     String label,
     String value, {
     bool isMonospace = false,
-    bool isHighlight = false,
     bool canCopy = false,
   }) {
     final display = (isMonospace && value.length > 16)
@@ -731,10 +291,7 @@ class SettingsScreen extends StatelessWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Text(
-          label,
-          style: AppTextStyles.sm(context, color: AppColors.textSecondary),
-        ),
+        Text(label, style: AppTextStyles.sm(context, color: AppColors.textSecondary)),
         const SizedBox(width: 8),
         Flexible(
           child: Row(
@@ -744,22 +301,8 @@ class SettingsScreen extends StatelessWidget {
                 child: Text(
                   display,
                   style: isMonospace
-                      ? AppTextStyles.mono(
-                          context,
-                          fontSize: 11,
-                          color: AppColors.brandPrimary,
-                        )
-                      : (isHighlight
-                            ? AppTextStyles.sm(
-                                context,
-                                fontWeight: AppTextStyles.bold,
-                                color: AppColors.textPrimary,
-                              )
-                            : AppTextStyles.sm(
-                                context,
-                                fontWeight: AppTextStyles.medium,
-                                color: AppColors.textPrimary,
-                              )),
+                      ? AppTextStyles.mono(context, fontSize: 11)
+                      : AppTextStyles.sm(context, fontWeight: AppTextStyles.medium),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
@@ -769,23 +312,36 @@ class SettingsScreen extends StatelessWidget {
                   onTap: () {
                     Clipboard.setData(ClipboardData(text: value));
                     ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('Copied $label: $value'),
-                        backgroundColor: AppColors.allow,
-                        behavior: SnackBarBehavior.floating,
-                      ),
+                      SnackBar(content: Text('Copied $label')),
                     );
                   },
-                  child: const Icon(
-                    Icons.copy_rounded,
-                    size: 13,
-                    color: AppColors.textMuted,
-                  ),
+                  child: const Icon(Icons.copy_rounded, size: 13, color: AppColors.textMuted),
                 ),
               ],
             ],
           ),
         ),
+      ],
+    );
+  }
+
+  Widget _buildLoadingRow(BuildContext context, String label) {
+    return Row(
+      children: [
+        const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2)),
+        const SizedBox(width: 10),
+        Text(label, style: AppTextStyles.sm(context, color: AppColors.textSecondary)),
+      ],
+    );
+  }
+
+  Widget _buildErrorRow(BuildContext context, String message, {required VoidCallback onRetry}) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(message, style: AppTextStyles.sm(context, color: AppColors.blockText)),
+        const SizedBox(height: 8),
+        OutlinedButton(onPressed: onRetry, child: const Text('Retry')),
       ],
     );
   }

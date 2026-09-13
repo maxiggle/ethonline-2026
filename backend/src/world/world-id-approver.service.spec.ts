@@ -180,6 +180,52 @@ describe('WorldIdApproverService', () => {
       jest.useRealTimers();
     });
 
+    it('does not overlap polls or re-verify a proof when a poll outlasts the interval', async () => {
+      jest.useFakeTimers();
+
+      const confirmedPoll = {
+        type: 'confirmed',
+        result: {
+          action: 'chapter2-ledger-approver',
+          responses: [
+            {
+              identifier: 'orb',
+              signal_hash: hashSignal(approverAddress),
+              nullifier: '0xslowpollnullifier',
+              proof: '0xproof',
+              merkle_root: '0xroot',
+            },
+          ],
+        },
+      };
+      let pollCount = 0;
+      requestClient.createOrbRequest = async (signal: string) => {
+        requestClient.lastSignal = signal;
+        return {
+          requestId: 'req-slow-poll',
+          connectorUrl: 'https://staging.world.org/verify?t=slow',
+          pollOnce: () => {
+            pollCount += 1;
+            return new Promise((resolve) => setTimeout(() => resolve(confirmedPoll), 5000));
+          },
+        };
+      };
+      const verifySpy = jest
+        .spyOn(verifyClient, 'verifyProof')
+        .mockResolvedValueOnce({ success: true, results: [{ identifier: 'orb', success: true }] })
+        .mockRejectedValue(new Error('World ID verification failed: [already_verified] duplicate proof'));
+
+      const verification = await service.startOrbVerification('user-1');
+      await jest.advanceTimersByTimeAsync(12000);
+
+      const current = service.getOrbVerification('user-1', verification.requestId);
+      expect(pollCount).toBe(1);
+      expect(verifySpy).toHaveBeenCalledTimes(1);
+      expect(current.status).toBe('VERIFIED');
+
+      jest.useRealTimers();
+    });
+
     it('fails when signal_hash does not match the approver address', async () => {
       jest.useFakeTimers();
 

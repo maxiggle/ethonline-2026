@@ -124,24 +124,33 @@ export class WorldIdApproverService implements OnModuleDestroy {
     return this.toOrbVerificationResponse(session);
   }
 
+  private isAwaitingWorldId(session: VerificationSession): boolean {
+    return session.status === 'WAITING_FOR_WORLD_APP' || session.status === 'AWAITING_CONFIRMATION';
+  }
+
   private startPollingLoop(
     session: VerificationSession,
     pollOnce: () => Promise<any>,
     checksummedApprover: string,
   ): void {
+    // A bridge poll can outlast the interval; overlapping polls could verify the same proof twice
+    // and let the second verify call overwrite a VERIFIED session with FAILED.
+    let isPollInFlight = false;
     const timer = setInterval(async () => {
+      if (isPollInFlight || !this.isAwaitingWorldId(session)) {
+        return;
+      }
+      isPollInFlight = true;
       try {
         if (new Date(session.expiresAt).getTime() <= Date.now()) {
           this.stopPolling(session);
-          if (session.status !== 'BOUND') {
-            session.status = 'EXPIRED';
-            session.connectorUrl = null;
-          }
+          session.status = 'EXPIRED';
+          session.connectorUrl = null;
           return;
         }
 
         const pollResult = await pollOnce();
-        if (!pollResult) return;
+        if (!pollResult || !this.isAwaitingWorldId(session)) return;
 
         if (pollResult.type === 'awaiting_confirmation') {
           if (session.status === 'WAITING_FOR_WORLD_APP') {
@@ -164,9 +173,13 @@ export class WorldIdApproverService implements OnModuleDestroy {
         }
       } catch (err: any) {
         this.stopPolling(session);
-        session.status = 'FAILED';
-        session.connectorUrl = null;
-        session.errorMessage = err.message || 'Verification failed';
+        if (this.isAwaitingWorldId(session)) {
+          session.status = 'FAILED';
+          session.connectorUrl = null;
+          session.errorMessage = err.message || 'Verification failed';
+        }
+      } finally {
+        isPollInFlight = false;
       }
     }, POLL_INTERVAL_MS);
 

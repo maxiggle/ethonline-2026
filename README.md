@@ -1,203 +1,118 @@
 # Chapter 2
 
-> **AI Guardian for Autonomous Treasuries**
+> **The control layer for AI agents that spend money.**
 > *"AI agents can manage your treasury. Chapter 2 makes sure they never manage to control it."*
 
-AI agents can now pay for APIs by themselves with [x402](https://x402.org). Chapter 2 is the missing control layer: every payment an agent wants to make is evaluated by the **Chapter 2 Guardian** before any signature exists.
+AI agents can now pay for APIs and services by themselves with [x402](https://x402.org), the internet-native payment protocol. That's only useful to a company if it can trust the agent with money.
 
-- **ALLOW:** small payments to approved payees are signed by the agent's own wallet. That wallet's key is encrypted with the **Ledger Key Ring** (`wallet-cli ring`).
-- **ESCALATE:** larger payments are signed by a human **on their Ledger** (Nano X / Flex).
-- **BLOCK:** anything else is refused, so no signature is ever produced.
+Chapter 2 lets a company give its AI agent a spending budget and let it buy services on its own, while a human stays in control of anything that matters. Every payment the agent wants to make goes through the **Chapter 2 Guardian** first:
 
-Settlement happens on Base Sepolia USDC through the public x402 facilitator, and the backend verifies every transfer on-chain.
+- **ALLOW:** small payments to approved services. The agent pays by itself.
+- **ESCALATE:** larger payments. A human approves them on their **Ledger**.
+- **BLOCK:** unapproved services. The payment never happens; no signature is ever created.
 
-## Architecture
+Payments are real USDC on Base Sepolia, settled through the public x402 facilitator and verified on-chain.
+
+## How it works: two layers
+
+### Management layer (the humans)
+- **Chapter 2 mobile app:**
+  - Sign in with Google through **Privy**.
+  - Bind your company's agent.
+  - Browse and search paid services.
+  - Ask the agent to buy one.
+  - Approve or reject big payments on your **Ledger** over Bluetooth.
+  - See every decision in the activity feed.
+- **Guardian backend:**
+  - Applies the spending policy (approved services, per-payment limit, daily limit).
+  - Queues purchase requests.
+  - Accepts an approval only if it was signed by the company's Ledger.
+  - Verifies every settlement on-chain.
+- **Ledger device:** the human approver's key. Big payments can't move without it. A web console over WebHID is also available.
+
+### Agent layer (the AI agent)
+- **Agent worker:** runs on the agent's own machine. Its wallet key is protected by the **Ledger Key Ring** (`wallet-cli ring`) and never leaves that machine.
+- **x402 payments:** the agent pays services in USDC, using signed payment authorizations (EIP-3009) settled by the x402 facilitator.
+
+### How the layers connect
 
 ```mermaid
 flowchart LR
-    A[AI agent<br/>scripts/agent-x402-client.ts] -->|GET resource| R[x402 v2 resource<br/>/x402/weather, /x402/chain-report, ...]
-    R -->|402 PAYMENT-REQUIRED| A
-    A -->|signed request<br/>POST /x402/payments/authorize| G{Chapter 2 Guardian<br/>spending policy}
-    G -->|ALLOW| K[Agent wallet<br/>key decrypted from wallet-cli ring<br/>signs EIP-3009]
-    G -->|ESCALATE| L[Ledger approval console<br/>DMK over WebHID<br/>human signs EIP-3009 on device]
-    G -->|BLOCK| X[No signature]
-    K -->|PAYMENT-SIGNATURE| R
-    L -->|signature verified against<br/>LEDGER_APPROVER_ADDRESS| A
-    A -->|PAYMENT-SIGNATURE| R
-    R -->|verify + settle| F[x402.org facilitator<br/>Base Sepolia USDC]
-    F -->|tx hash| R
-    A -->|POST /x402/payments/:id/settlement| V[Backend verifies the<br/>USDC Transfer log on-chain]
+    subgraph M[Management layer]
+        APP[Mobile app<br/>Privy login]
+        G{Guardian backend<br/>spending policy}
+        L[Ledger<br/>human approver]
+    end
+    subgraph A[Agent layer]
+        W[Agent worker<br/>Key Ring-protected key]
+    end
+    S[x402 service<br/>e.g. weather API]
+    F[x402 facilitator<br/>Base Sepolia USDC]
+
+    APP -->|1. Ask agent to pay| G
+    W -->|2. Claim request, signed| G
+    W -->|3. Request service| S
+    S -->|402: price and payee| W
+    W -->|4. Ask Guardian| G
+    G -->|ALLOW| W
+    G -->|ESCALATE| APP
+    APP -->|Approve on device| L
+    L -->|Ledger signature| G
+    G -->|signature verified| W
+    W -->|5. Pay with signed authorization| S
+    S --> F
+    W -->|6. Report settlement| G
+    G -->|verified on-chain, PAID| APP
 ```
 
-## How Ledger is used
+1. **The user asks.** In the app, the operator picks a service (say, a weather API) and taps **Ask agent to pay**. That creates a purchase request.
+2. **The agent picks it up.** The agent worker claims the request, authenticating with a signature from its own key.
+3. **The service names its price.** The agent calls the service, which answers `402 Payment Required` with the price and payee.
+4. **The Guardian decides.**
+   - **ALLOW:** the agent signs the payment itself.
+   - **ESCALATE:** the payment appears in the app, and the human signs it on the Ledger. The backend checks that the signature comes from the company's Ledger before the agent can use it.
+   - **BLOCK:** nothing is signed.
+5. **The agent pays.** It retries the call with the signed payment. The x402 facilitator settles the USDC transfer on Base Sepolia.
+6. **The backend verifies.** It reads the USDC transfer on-chain, and the app shows the purchase as paid, with the transaction and the data the service returned.
 
-1. **`wallet-cli ring` protects the agent's payment key.**
-   - The agent's private key is encrypted under a Key Ring provisioned with the user's Ledger (`wallet-cli ring init` / `ring encrypt`).
-   - At startup the agent runs `wallet-cli ring decrypt` and holds the key in memory only.
-   - The key is never written to disk in plaintext, logged, or sent to the backend. See [`scripts/lib/ledger-key-ring.ts`](scripts/lib/ledger-key-ring.ts).
-2. **Human-in-the-loop signing on the device.**
-   - Escalated payments appear in the [approval console](approval-console/), a web app using Ledger's Device Management Kit over WebHID.
-   - The human reviews the resource, amount, payee, Guardian risk score and reasons, then signs the USDC `TransferWithAuthorization` (EIP-3009) on their Nano X / Flex.
-   - The payment is then made **from the Ledger address**.
-3. **The backend only trusts the Ledger.**
-   - `POST /x402/approvals/:id/signature` and `/reject` accept a signature only if it recovers to `LEDGER_APPROVER_ADDRESS`.
-   - An escalation can't be approved by anyone who merely reaches the API.
+**Trust boundaries:**
+- The backend holds no signing keys.
+- The agent's key never leaves the agent's machine.
+- Only the Ledger can approve an escalated payment.
+- A payment counts as paid only once the transfer is verified on-chain.
 
-Details: [`docs/features/x402-ledger-agent-payments.md`](docs/features/x402-ledger-agent-payments.md) · Ledger developer experience notes: [`docs/ledger-dx-feedback.md`](docs/ledger-dx-feedback.md)
+## Partners
 
-## Run the demo locally
+| Partner | What it does in Chapter 2 | Details |
+|---|---|---|
+| **Ledger** | Key Ring protects the agent's wallet key. Humans approve big payments on the device (mobile Bluetooth and web WebHID). The backend only accepts Ledger-signed approvals. | [docs/partners/ledger](docs/partners/ledger) |
+| **Privy** | Google sign-in and an embedded EVM wallet for every user. Server-side token verification scopes agents, purchases and approvals to the right account. | [docs/partners/privy](docs/partners/privy) |
+| **World** | World ID Selfie Check proves a real, unique human stands behind the approver. The verification service is built; the approval gate waits on World granting access. | [docs/partners/world](docs/partners/world) |
 
-### Prerequisites
-- Node 20+, Docker (for Postgres), Foundry (`cast`), `jq`
-- `wallet-cli` (`npm i -g @ledgerhq/wallet-cli`)
-- Chrome or Edge (WebHID)
-- A Ledger Nano X or Flex with the Ethereum app
-- Base Sepolia USDC from [faucet.circle.com](https://faucet.circle.com), for **both** the agent address and the Ledger address. No ETH is needed, because the facilitator pays gas.
+## Project status
 
-### 1. Provision the Key Ring-protected agent wallet (once)
+- **Live on Base Sepolia:** the Guardian backend, x402 services and service discovery on [chapter2-backend.onrender.com](https://chapter2-backend.onrender.com/discovery/resources).
+- **Built and tested:**
+  - the mobile app: Services, Ledger approvals, activity;
+  - the agent worker with the Ledger Key Ring;
+  - Ledger approvals over Bluetooth and WebHID;
+  - the purchase request queue.
+- **In progress:**
+  - live Ledger device testing with a remote tester;
+  - the World ID approval gate, pending World's Selfie Check access (see [docs/world-id-approval-gate.md](docs/world-id-approval-gate.md)).
 
-```bash
-security add-generic-password -a default -s ledger-wallet-cli -w
-WALLET_PASS=$(security find-generic-password -a default -s ledger-wallet-cli -w) wallet-cli ring init
-mkdir -p ~/.chapter2
-cast wallet new --json | jq -r '.[0].private_key' | \
-  WALLET_PASS=$(security find-generic-password -a default -s ledger-wallet-cli -w) \
-  wallet-cli ring encrypt -o ~/.chapter2/agent-key.enc --key chapter2-x402-agent
-npm --prefix scripts install
-WALLET_PASS=$(security find-generic-password -a default -s ledger-wallet-cli -w) \
-AGENT_KEY_SOURCE=ledger-key-ring AGENT_KEY_RING_FILE=~/.chapter2/agent-key.enc AGENT_KEY_RING_KEY_NAME=chapter2-x402-agent \
-npm --prefix scripts run agent:address
-```
+## For developers
 
-The first command prompts for the ring password, and `ring init` needs approval on the device. The last command prints the agent address; fund it with USDC.
+- **Run it locally, environment, testing without a Ledger, security model:** [docs/development.md](docs/development.md)
+- **Feature docs:** [docs/features](docs/features)
+- **Demo video script:** [docs/demo-script.md](docs/demo-script.md)
+- **Ledger developer experience feedback:** [docs/ledger-dx-feedback.md](docs/ledger-dx-feedback.md)
 
-### 2. Configure and start the backend
-
-```bash
-docker compose up -d postgres
-cd backend && cp .env.example .env && npm install
-npm run start:dev
-```
-
-The x402 variables below are required: the backend refuses to start if one is missing. The Privy credentials are needed to bind the agent in step 3.
-
-| Variable | Value / meaning |
+| Folder | Contents |
 |---|---|
-| `X402_NETWORK` | `eip155:84532` (Base Sepolia) |
-| `X402_FACILITATOR_URL` | `https://x402.org/facilitator` |
-| `USDC_ADDRESS` | `0x036CbD53842c5426634e7929541eC2318f3dCF7e` |
-| `X402_PAY_TO_ADDRESS` | Seller wallet that receives payments (a fresh address, not the agent or the Ledger) |
-| `X402_PARTNER_PAY_TO_ADDRESS` | A second seller address that is **not** approved (used to demo BLOCK) |
-| `X402_APPROVED_PAY_TO` | Comma-separated approved payees; includes `X402_PAY_TO_ADDRESS`, excludes the partner address |
-| `X402_AUTONOMOUS_LIMIT` | Per-payment autonomous cap in USDC atomic units, e.g. `1000000` ($1.00) |
-| `X402_DAILY_LIMIT` | Daily autonomous cap in atomic units, e.g. `5000000` ($5.00) |
-| `LEDGER_APPROVER_ADDRESS` | Your Ledger's Ethereum address (`44'/60'/0'/0/0`) |
-| `PUBLIC_BASE_URL` | e.g. `http://localhost:3001` |
-| `PRIVY_APP_ID`, `PRIVY_APP_SECRET` | Privy app credentials. Without them every bearer token is rejected, so the agent can't be bound |
-
-### 3. Bind the agent to your Chapter 2 user
-
-The payments API only accepts requests signed by an `ACTIVE` bound agent. Bind yours with the mobile app's **Add Agent** sheet, or call the API with your Privy bearer token:
-
-```bash
-curl -X POST http://localhost:3001/agents/bind \
-  -H "Authorization: Bearer $PRIVY_TOKEN" -H 'Content-Type: application/json' \
-  -d '{"agentAddress":"<agent address>","name":"x402 agent","safeAddress":"0x4f712dd78Cb1a504C69CB4f68B82Fddb6b3b1df6","guardAddress":"0x9b6023D1B6D3b076C8d999Ba406AE486750ce7d3","chainId":84532}'
-```
-
-### 4. Start the Ledger approval console
-
-```bash
-cd approval-console && cp .env.example .env && npm install
-npm run dev
-```
-
-Open it in Chrome or Edge and click **Connect Ledger**. Keep the device unlocked with the Ethereum app open. The console checks that the device address matches `LEDGER_APPROVER_ADDRESS`.
-
-### 5. Run the agent
-
-```bash
-WALLET_PASS=$(security find-generic-password -a default -s ledger-wallet-cli -w) \
-AGENT_KEY_SOURCE=ledger-key-ring AGENT_KEY_RING_FILE=~/.chapter2/agent-key.enc \
-AGENT_KEY_RING_KEY_NAME=chapter2-x402-agent \
-API_BASE_URL=http://localhost:3001 \
-npm --prefix scripts run demo:x402
-```
-
-Pass `-- --scenario=allow|escalate|block` to run a single scenario:
-- **allow:** `$0.01` weather, paid by the agent wallet.
-- **escalate:** `$2.00` chain report. Approve it in the console on your Ledger within 15 minutes.
-- **block:** a partner feed with an unapproved payee; no signature is made.
-
-Demo video plan and pre-submission checklist: [`docs/demo-script.md`](docs/demo-script.md).
-
-### Test the payment rail without a Ledger
-
-The Key Ring needs the Ledger plugged in for `ring init`. To test a real x402 payment on a machine without the device, load a test agent key from a password-encrypted Foundry keystore instead. This only replaces how the agent's key is loaded: escalated payments still need the Ledger approver, and the demo itself uses `AGENT_KEY_SOURCE=ledger-key-ring`.
-
-```bash
-security add-generic-password -a default -s chapter2-test-agent -w
-cast wallet new ~/.foundry/keystores chapter2-test-agent
-```
-
-The first command stores a password in the Keychain. `cast wallet new` prompts for that same password and prints the test agent's address. Fund that address with Base Sepolia USDC and bind it as in step 3.
-
-```bash
-AGENT_KEY_SOURCE=foundry-keystore \
-AGENT_KEYSTORE_FILE=~/.foundry/keystores/chapter2-test-agent \
-AGENT_KEYSTORE_PASSWORD=$(security find-generic-password -a default -s chapter2-test-agent -w) \
-API_BASE_URL=https://chapter2-backend.onrender.com \
-npm --prefix scripts run demo:x402 -- --scenario=allow
-```
-
-`AGENT_KEY_SOURCE` has no default; the client refuses to start without it.
-
-### Buy a service from the app
-
-Instead of the demo client picking a scenario, the app can queue a purchase request for the agent worker to pay:
-
-```bash
-curl -X POST https://chapter2-backend.onrender.com/x402/purchase-requests \
-  -H "Authorization: Bearer $PRIVY_TOKEN" -H 'Content-Type: application/json' \
-  -d '{"agentAddress":"<agent address>","resourceUrl":"https://chapter2-backend.onrender.com/x402/weather","queryParams":{"city":"Lagos"},"justification":"Brief the morning report."}'
-```
-
-`resourceUrl` must be a `resource` from the same backend's `GET /discovery/resources`; the worker only pays resources on its own `API_BASE_URL`. In the app, the Services tab creates these requests for you.
-
-Run the worker with the same environment as the demo client (`API_BASE_URL`, `AGENT_KEY_SOURCE` and its per-source variables):
-
-```bash
-WALLET_PASS=$(security find-generic-password -a default -s ledger-wallet-cli -w) \
-AGENT_KEY_SOURCE=ledger-key-ring AGENT_KEY_RING_FILE=~/.chapter2/agent-key.enc \
-AGENT_KEY_RING_KEY_NAME=chapter2-x402-agent \
-API_BASE_URL=https://chapter2-backend.onrender.com \
-npm --prefix scripts run agent:worker
-```
-
-It polls `POST /x402/purchase-requests/claim` every 5 seconds, pays the oldest queued request through the same Guardian-gated flow (ALLOW / ESCALATE / BLOCK), reports the Guardian's decision as soon as it authorizes the payment, then reports `PAID`, `BLOCKED`, `REJECTED`, `EXPIRED` or `FAILED`. `Ctrl-C` finishes the request in flight before exiting. Poll `GET /x402/purchase-requests/:id` from the app to watch it move from `QUEUED` through to a terminal state.
-
-## Security model and known limitations
-
-- **What's enforced:**
-  - Agent requests are authenticated by an EIP-191 signature from the Key Ring wallet, with a timestamp and a single-use signature.
-  - The spending policy (network, USDC asset, approved payee, per-payment and daily limits) runs before any payment signature exists.
-  - Escalation typed data is checked against the Guardian's record (payer = Ledger, payee, amount, token, chain, expiry). The approval must recover to the Ledger address.
-  - Settlement is confirmed by reading the USDC `Transfer` log on-chain.
-- **Human verification with World ID is designed but not enforced yet.** Escalated approvals currently require only the Ledger signature. The World ID Selfie Check verification service is built and tested, but World hasn't approved Selfie Check for this app, and enforcing it now would block every approval. Design and rollout plan: [`docs/world-id-approval-gate.md`](docs/world-id-approval-gate.md).
-- **The backend holds no relayer key.** `OnChainExecutorService` only reads Base Sepolia (settlement verification, contract state, balances), so the legacy Safe / `Chapter2Guard` execution path is disabled: `/actions` approvals are recorded but never broadcast. The deployed Guard's owner / `humanSigner` key was exposed earlier; it stays in git history and must never hold funds (PAY-001).
-- **Single-instance state:**
-  - The agent-signature replay cache, the legacy `/vendor/*` receipt replay protection, and the escalation reasons awaiting typed data are all held per backend instance.
-  - Settlement verification has no cross-action replay guard.
-- **The Flutter app** approves escalated payments on a Ledger over Bluetooth with the v0 hashed EIP-712 command, so the device shows hashes and Blind signing must be on. It never holds the agent's key.
-- **`native_security/` holds iOS/Android biometric plugin prototypes.** The demo doesn't use them, and they aren't production security controls.
-- **Without a Ledger origin token** (`VITE_LEDGER_ORIGIN_TOKEN`), the console still signs, with reduced Ledger-side transaction checks.
-
-## Monorepo structure
-
-- `backend/`: NestJS API. Guardian spending policy, x402 v2 seller endpoints, Guardian-gated payments API.
-- `approval-console/`: Ledger DMK / WebHID web console for escalated payments.
-- `scripts/`: the autonomous agent (Key Ring wallet + x402 client).
-- `contracts/`: Foundry contracts (`Chapter2Guard` Safe transaction guard), used by the legacy execution path.
-- `chapter2/`: Flutter mobile command center.
-- `native_security/`: native biometric plugin prototypes (not used by the demo).
-- `docs/`: architecture, feature docs, tickets.
+| `chapter2/` | Flutter mobile app (management layer) |
+| `backend/` | NestJS Guardian backend, x402 services and purchase requests |
+| `scripts/` | Agent worker and x402 demo client (agent layer) |
+| `approval-console/` | Ledger WebHID approval console |
+| `contracts/` | Foundry contracts (`Chapter2Guard`) |
+| `docs/` | Partner pages, feature docs, tickets |

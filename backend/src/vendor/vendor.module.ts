@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { VendorController } from './vendor.controller';
 import { DiscoveryController } from './discovery.controller';
 import { VendorService } from './vendor.service';
@@ -8,7 +8,7 @@ import { AgentsModule } from '../agents/agents.module';
 import { X402Module } from '../x402/x402.module';
 
 @Module({
-  imports: [BlockchainModule, ActionsModule, AgentsModule, X402Module],
+  imports: [BlockchainModule, ActionsModule, AgentsModule, forwardRef(() => X402Module)],
   controllers: [VendorController, DiscoveryController],
   providers: [VendorService],
   exports: [VendorService],

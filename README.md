@@ -3,6 +3,14 @@
 > **The control layer for AI agents that spend money.**
 > *"AI agents can manage your treasury. Chapter 2 makes sure they never manage to control it."*
 
+## 📱 Download the Android app
+
+**[⬇️ Download the Chapter 2 APK (Android)](https://drive.google.com/file/d/1FqTPPB-e_XIZJYlPE4sh0Fop3NwwlSU9/view?usp=sharing)**
+
+- **Backend:** the app connects to the live Guardian backend on Render (Base Sepolia). Sign in with Google.
+- **Install:** download the APK on an Android phone, open it, and allow installing from this source when prompted.
+- **Ledger approver without an agent:** on the **Bind agent** step, tap **Skip, I'm only approving**. Then connect a Ledger (Nano X / Flex) over Bluetooth in **Approvals**.
+
 AI agents can now pay for APIs and services by themselves with [x402](https://x402.org), the internet-native payment protocol. That's only useful to a company if it can trust the agent with money.
 
 Chapter 2 lets a company give its AI agent a spending budget and let it buy services on its own, while a human stays in control of anything that matters. Every payment the agent wants to make goes through the **Chapter 2 Guardian** first:

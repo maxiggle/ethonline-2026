@@ -5,7 +5,7 @@ Read this file first, then the whole ticket.
 
 ---
 
-## 🚨 Submission track: ETHOnline 2026, due Sunday (finish tonight)
+## Submission track: ETHOnline 2026
 
 Goal: a working, demoable **x402 v2 + Ledger** agent-payment flow.
 
@@ -42,6 +42,7 @@ The API contract between X402-002, LEDGER-002 and X402-003 is fixed in X402-002.
 | `PUBLIC_BASE_URL` | backend | Public URL of the backend, e.g. `http://localhost:3001` or the Render URL |
 | `WALLET_PASS` | agent machine only | Ledger Key Ring password (from the macOS Keychain, never in files) |
 | `AGENT_KEY_RING_FILE` / `AGENT_KEY_RING_KEY_NAME` | agent machine only | Encrypted agent key file and ring key name |
+| `AGENT_KEY_SOURCE` | agent machine only | `ledger-key-ring` (demo) or `foundry-keystore` (testing); no default |
 | `API_BASE_URL` | script | Backend URL |
 | `VITE_API_BASE_URL`, `VITE_LEDGER_ORIGIN_TOKEN` | console | Backend URL; Ledger partner origin token if you have one (optional, never invented) |
 
@@ -54,38 +55,29 @@ Every backend variable above is **required**: fail at startup with a clear error
 
 ---
 
-## Status of earlier tickets
+## Status (2026-09-13)
 
 | Ticket | Status |
 |---|---|
-| [SEC-004: x402 tx-hash verification & replay protection](TICKET-SEC-004-X402-PAYMENT-VERIFICATION.md) | ✅ Done, verified (legacy `/vendor/*` rail) |
-| [PAY-001: Rotate leaked keys & redeploy](TICKET-PAY-001-KEY-ROTATION-REDEPLOY.md) | 👤 **Human part still urgent:** make sure the leaked relayer `0x988B…` holds no funds. Redeploy is deferred. |
-| [PAY-002](TICKET-PAY-002-TOKEN-AND-MANDATE-CONFIG.md), [PAY-003](TICKET-PAY-003-EXECUTION-LIFECYCLE.md), [PAY-004](TICKET-PAY-004-X402-SETTLEMENT-FLOW.md), [PAY-005](TICKET-PAY-005-MOBILE-SIGNING-AND-API.md) | Deferred; x402 parts superseded by the submission track |
-| [SEC-005](TICKET-SEC-005-USER-SCOPING-AND-WEBSOCKET-AUTH.md), [CLEAN-001](TICKET-CLEAN-001-ZERO-FALLBACK-AND-HYGIENE.md), [DOCS-001](TICKET-DOCS-001-DOCUMENTATION-REFRESH.md) | Deferred |
+| [LEDGER-001: Key Ring agent wallet](TICKET-LEDGER-001-KEY-RING-AGENT-WALLET.md) | ✅ Code done and verified; live Ledger run pending (device is with a remote tester) |
+| [X402-001: x402 v2 seller](TICKET-X402-001-X402-V2-SELLER.md) | ✅ Live on Render |
+| [X402-002: Guardian-gated payments API](TICKET-X402-002-GUARDIAN-GATED-PAYMENTS-API.md) | ✅ Live on Render |
+| [LEDGER-002: web approval console](TICKET-LEDGER-002-WEB-APPROVAL-CONSOLE.md) | ✅ Code done; live device run pending |
+| [X402-003: agent demo client](TICKET-X402-003-AGENT-DEMO-CLIENT.md) | ✅ Code done and verified |
+| [X402-004: purchase requests + agent worker](TICKET-X402-004-AGENT-PURCHASE-REQUESTS.md) | ✅ Live on Render |
+| [MOBILE-001: Ledger Bluetooth approvals](TICKET-MOBILE-001-LEDGER-BLE-X402-APPROVALS.md) | ✅ Code done and verified; live device run pending |
+| [MOBILE-002: simplified UI and onboarding](TICKET-MOBILE-002-SIMPLIFY-UI-AND-ONBOARDING.md) | ✅ Done and verified |
+| [MOBILE-003: Services tab](TICKET-MOBILE-003-SERVICES-TAB.md) | ✅ Done and verified |
+| [SUBMIT-001: docs, DX feedback, demo](TICKET-SUBMIT-001-DOCS-AND-DEMO.md) | ✅ Docs, partner pages and DX feedback done; video pending |
+| [SEC-004: legacy x402 tx verification](TICKET-SEC-004-X402-PAYMENT-VERIFICATION.md) | ✅ Done (legacy `/vendor/*` rail) |
+| [PAY-001: leaked key rotation](TICKET-PAY-001-KEY-ROTATION-REDEPLOY.md) | ✅ Relayer key removed from the backend (executor is read-only). 👤 Sweep the leaked relayer's funds and delete the keys from Render |
+| [PAY-002](TICKET-PAY-002-TOKEN-AND-MANDATE-CONFIG.md) … [PAY-005](TICKET-PAY-005-MOBILE-SIGNING-AND-API.md), [SEC-005](TICKET-SEC-005-USER-SCOPING-AND-WEBSOCKET-AUTH.md), [CLEAN-001](TICKET-CLEAN-001-ZERO-FALLBACK-AND-HYGIENE.md), [DOCS-001](TICKET-DOCS-001-DOCUMENTATION-REFRESH.md) | Deferred / superseded by the x402 architecture |
 
-Note: branch history was rewritten locally on 2026-09-12 to strip `Co-Authored-By` trailers, so commit hashes from `be3c1c3` onward differ from any earlier notes.
+**Designed, not built:**
+- the World ID approval gate ([world-id-approval-gate.md](../world-id-approval-gate.md)), pending World Selfie Check access;
+- a signed agent-binding challenge.
 
----
-
-## Current state
-
-Work branch: `feature/backend-security-hardening` (cut from `development`, **not pushed**).
-
-Done on that branch:
-- **Removed leaked key:** the hardcoded relayer private key is gone from the specs. It is still in git history.
-- **Privy auth:** `test_token_` identities only under `NODE_ENV=test`, unsigned JWT decoding removed, wallet taken from Privy only.
-- **Protected routes:** `PrivyAuthGuard` plus `AgentsService.assertAgentOwnership` now cover `/actions`, `/ledger`, `/world/selfie`, mandate mutations, and vendor billing/invoke routes plus `/discovery/call`.
-- **World ID:** `SANDBOX` verification only runs under jest.
-- **Ledger:** the mock key `0xA11CE` is only loaded under jest, and `POST /ledger/sign` is removed.
-- **Approvals:** escalation approvals require the Chapter2Guard on-chain `humanSigner`.
-- **Legacy x402 rail (`/vendor/*`):** verifies the ERC-20 `Transfer` on-chain (`OnChainExecutorService.verifyTokenTransfer`), and each tx hash can be redeemed once (`x402_payment_receipts`).
-
-Deployed on-chain state (Base Sepolia, chain 84532):
-- **Chapter2Guard** `0x9b6023D1B6D3b076C8d999Ba406AE486750ce7d3`:
-  - `owner` = `humanSigner` = leaked relayer `0x988B225185b516DEF12A7Ec841abae9072ef4EE8`
-  - owner-sent transactions bypass every Guard check
-  - no token is approved
-- **MockSafe** `0x4f712dd78Cb1a504C69CB4f68B82Fddb6b3b1df6` is not an ERC-20.
+Current architecture: [ARCHITECTURE.md](../ARCHITECTURE.md). Branch `feature/backend-security-hardening` is merged into `main`.
 
 ## Rules every ticket must follow
 

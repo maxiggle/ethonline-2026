@@ -39,7 +39,8 @@ never downgrade a BLOCK or ESCALATE.
 ### Persistence (`x402_escalations` table)
 Follows the existing `DatabaseService` table pattern (Postgres DDL + in-memory `querySync`/`runSync`
 + load + file persistence), storing `action_id` (PK), `resource_url`, `typed_data` (JSON text),
-`signature`, `status` (`AWAITING_SIGNATURE | SIGNED | REJECTED`) and timestamps. Every x402 payment
+`reasons` (the spending policy's ESCALATE reasons, JSON text), `signature`, `status`
+(`AWAITING_SIGNATURE | SIGNED | REJECTED`) and timestamps. Every x402 payment
 is also a `TreasuryAction` (`justification` prefixed `x402: <resourceUrl> | <reason>`), so it shows
 in the existing activity timeline for free.
 
@@ -57,8 +58,8 @@ in the existing activity timeline for free.
 | Method & path | Behaviour |
 |---|---|
 | `GET /x402/approvals/config` | `{ approverAddress, network, usdcAddress }`. |
-| `GET /x402/approvals/pending` | Escalations still `AWAITING_SIGNATURE`, with the stored `typedData` for the console to render and re-sign. |
-| `POST /x402/approvals/:actionId/signature` | Recovers with `ethers.verifyTypedData(domain, types-without-EIP712Domain, message, signature)`; must checksum-equal `LEDGER_APPROVER_ADDRESS`. Marks the escalation `SIGNED`, the action `APPROVED` (with the signature), and emits `emitActionApproved`. |
+| `GET /x402/approvals/pending` | Escalations still `AWAITING_SIGNATURE`, with the stored `typedData` and the policy `reasons` for the console to render and sign. |
+| `POST /x402/approvals/:actionId/signature` | Recovers with `ethers.verifyTypedData(domain, types-without-EIP712Domain, message, signature)`; must checksum-equal `LEDGER_APPROVER_ADDRESS`, and the typed data's `validBefore` must not have passed. Marks the escalation `SIGNED`, the action `APPROVED` (with the signature), and emits `emitActionApproved`. |
 | `POST /x402/approvals/:actionId/reject` | `signature` must be an EIP-191 `personal_sign` of `chapter2-reject:<actionId>` recovering to `LEDGER_APPROVER_ADDRESS`. Marks the escalation `REJECTED`, the action `REJECTED`, and emits `emitActionRejected`. |
 
 These console endpoints can only ever read pending payment details; every state change requires a
@@ -84,9 +85,15 @@ Agent → POST /x402/payments/:actionId/settlement { transactionHash } → { sta
   escalation row exists. `riskScore`/`requiresHumanApproval` are mutated in-memory on the action
   object at authorize time (same convention the legacy `ActionsController.proposeAction` already
   uses) and are not written back to the `treasury_actions` table by `ActionStoreService.updateStatus`.
-- **`reasons` on `/x402/approvals/pending` are not the original policy reasons** — the
-  `x402_escalations` schema (fixed by the ticket) has no column for them, so the console gets a
-  generic "escalated for human approval" reason instead of the specific rule that triggered it.
+- **Policy reasons are held in memory between authorize and escalation.** `authorize` keeps the
+  spending policy's ESCALATE reasons per action until the agent submits typed data, then they are
+  persisted in `x402_escalations.reasons` and served by `/x402/approvals/pending`. A backend restart
+  in the seconds between those two calls makes the escalation submission fail with `400`; the agent
+  re-requests the payment.
+- **Authorization expiry.** The x402 client sets `validBefore = now + maxTimeoutSeconds`. The
+  `chain-report` route advertises `maxTimeoutSeconds: 900` so a human has 15 minutes to approve on the
+  Ledger, and `POST /x402/approvals/:actionId/signature` refuses (`400`) an authorization whose
+  `validBefore` has already passed, since the facilitator could never settle it.
 - **No cross-action replay guard on settlement**, unlike the legacy `/vendor/*` rail's
   `x402_payment_receipts`: a `transactionHash` is checked against exactly one action's
   token/recipient/amount, but two coincidentally-identical actions could both be settled from the one

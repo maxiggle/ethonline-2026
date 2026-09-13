@@ -97,6 +97,27 @@ describe('PrivyAuthService', () => {
     });
   });
 
+  describe('returning users', () => {
+    it('reactivates a soft-deleted user as a new user when they sign in again', async () => {
+      const suffix = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      const identity = {
+        id: `did:privy:returning_${suffix}`,
+        email: `returning_${suffix}@example.com`,
+        name: 'Returning User',
+        walletAddress: '0x3333333333333333333333333333333333333333',
+      };
+      await service.syncUser(identity);
+      await service.deleteUserAccount(identity.id);
+      expect(await service.getUser(identity.id)).toBeNull();
+
+      const { user, isNewUser } = await service.syncUser(identity);
+
+      expect(isNewUser).toBe(true);
+      expect(user.id).toBe(identity.id);
+      expect(await service.getUser(identity.id)).not.toBeNull();
+    });
+  });
+
   describe('deleteUserAccount', () => {
     it('should soft-delete user in database and mark bound agents inactive', async () => {
       const identity = {
@@ -144,7 +165,23 @@ describe('PrivyAuthService', () => {
       expect(agents[0].status).toBe('INACTIVE');
     });
 
-    it('should throw BadRequestException when deleting non-existent or already deleted user', async () => {
+    it('treats deleting an already deleted account as success', async () => {
+      const suffix = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      const identity = {
+        id: `did:privy:del_twice_${suffix}`,
+        email: `del_twice_${suffix}@example.com`,
+        name: 'Deleted Twice',
+        walletAddress: '0x4444444444444444444444444444444444444444',
+      };
+      await service.syncUser(identity);
+      await service.deleteUserAccount(identity.id);
+
+      const res = await service.deleteUserAccount(identity.id);
+
+      expect(res.success).toBe(true);
+    });
+
+    it('should throw BadRequestException when deleting a user that never existed', async () => {
       await expect(
         service.deleteUserAccount('did:privy:non_existent_user'),
       ).rejects.toThrow();

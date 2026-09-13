@@ -159,6 +159,21 @@ export class PrivyAuthService {
       }
     }
 
+    // 3. A soft-deleted account signing in again is reactivated as a new user, so it goes through onboarding
+    let reactivated = false;
+    if (!existingUser) {
+      const deletedRows = await this.dbService.query('SELECT * FROM "user" WHERE id = ?', [identity.id]);
+      if (deletedRows.length > 0 && deletedRows[0].deletedAt) {
+        await this.dbService.run('UPDATE "user" SET "deletedAt" = ?, "updatedAt" = ? WHERE id = ?', [
+          null,
+          now,
+          identity.id,
+        ]);
+        reactivated = true;
+        existingUser = await this.getUser(identity.id);
+      }
+    }
+
     const walletAddress = identity.walletAddress || existingUser?.walletAddress;
     if (!walletAddress) {
       throw new BadRequestException('walletAddress is required');
@@ -185,7 +200,7 @@ export class PrivyAuthService {
         existingUser.id,
       ]);
       const user = await this.getUser(existingUser.id);
-      return { user, isNewUser: false };
+      return { user, isNewUser: reactivated };
     } else {
       const insertSql = `
         INSERT INTO "user" (id, email, name, "avatarUrl", "walletAddress", "createdAt", "updatedAt")
@@ -223,7 +238,11 @@ export class PrivyAuthService {
   async deleteUserAccount(userId: string): Promise<{ success: boolean; message: string }> {
     const user = await this.getUser(userId);
     if (!user) {
-      throw new BadRequestException(`User ${userId} does not exist or is already deleted`);
+      const rows = await this.dbService.query('SELECT * FROM "user" WHERE id = ?', [userId]);
+      if (rows.length > 0 && rows[0].deletedAt) {
+        return { success: true, message: 'Account already deleted' };
+      }
+      throw new BadRequestException(`User ${userId} does not exist`);
     }
 
     const now = new Date().toISOString();

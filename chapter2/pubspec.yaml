@@ -45,6 +45,8 @@ dependencies:
     path: ../packages/agent_security
   privy_flutter: ^0.10.2
   auto_route: ^10.0.1
+  ledger_flutter_plus: 1.6.0+1
+  pointycastle: 4.0.0
 
 dev_dependencies:
   flutter_test:
@@ -54,6 +56,18 @@ dev_dependencies:
   rename: ^3.1.0
   auto_route_generator: ^10.1.0
   build_runner: ^2.4.15
+
+# universal_ble >=2.1.0 (pulled in transitively by ledger_flutter_plus, which
+# allows ^2.0.0) dropped its `apply plugin: 'kotlin-android'` line in favor of
+# a bare `kotlin { ... }` Gradle DSL block, which only exists once the Kotlin
+# Gradle plugin is applied. Flutter's current Android template applies that
+# plugin per-module rather than implicitly to every subproject, so
+# universal_ble 2.1.0+ fails `assembleRelease` with:
+# "Could not find method kotlin() for arguments [...] on project ':universal_ble'".
+# Pinning back to 2.0.0 (the oldest version ledger_flutter_plus 1.6.0+1
+# accepts), which still applies the plugin explicitly, avoids the bug.
+dependency_overrides:
+  universal_ble: 2.0.0
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

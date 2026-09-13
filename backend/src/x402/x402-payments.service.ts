@@ -24,6 +24,8 @@ const REJECT_MESSAGE_PREFIX = 'chapter2-reject:';
 
 @Injectable()
 export class X402PaymentsService {
+  private readonly escalationReasons = new Map<string, string[]>();
+
   constructor(
     private readonly actionStore: ActionStoreService,
     private readonly spendingPolicy: X402SpendingPolicyService,
@@ -65,6 +67,7 @@ export class X402PaymentsService {
       });
     } else if (policy.decision === GuardianDecisionType.ESCALATE) {
       this.actionStore.updateStatus(action.id, TreasuryActionStatus.PENDING);
+      this.escalationReasons.set(action.id, policy.reasons);
     } else {
       this.actionStore.updateStatus(action.id, TreasuryActionStatus.APPROVED);
       this.eventsGateway.emitActionApproved({ action });
@@ -90,17 +93,30 @@ export class X402PaymentsService {
 
     this.assertValidEscalationTypedData(typedData, action);
 
+    const reasons = this.escalationReasons.get(actionId);
+    if (!reasons) {
+      throw new BadRequestException(`No spending policy escalation recorded for action ${actionId}`);
+    }
+
     const now = new Date().toISOString();
     await this.databaseService.run(
-      `INSERT INTO x402_escalations (action_id, resource_url, typed_data, signature, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [actionId, this.extractResourceUrl(action), JSON.stringify(typedData), null, 'AWAITING_SIGNATURE', now, now],
+      `INSERT INTO x402_escalations (action_id, resource_url, typed_data, reasons, signature, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        actionId,
+        this.extractResourceUrl(action),
+        JSON.stringify(typedData),
+        JSON.stringify(reasons),
+        null,
+        'AWAITING_SIGNATURE',
+        now,
+        now,
+      ],
     );
+    this.escalationReasons.delete(actionId);
 
     this.eventsGateway.emitActionEscalated({
       action,
-      decision: this.toGuardianDecision(action, GuardianDecisionType.ESCALATE, [
-        'Awaiting human approval via the Ledger web console.',
-      ]),
+      decision: this.toGuardianDecision(action, GuardianDecisionType.ESCALATE, reasons),
       typedData,
     });
 
@@ -209,7 +225,7 @@ export class X402PaymentsService {
         agentAddress: action.agentAddress,
         justification: action.justification,
         riskScore: action.riskScore,
-        reasons: ['Escalated for human approval per the x402 spending policy.'],
+        reasons: JSON.parse(row.reasons),
         typedData: JSON.parse(row.typed_data),
         createdAt: row.created_at,
       });
@@ -220,6 +236,11 @@ export class X402PaymentsService {
   async approveWithSignature(actionId: string, signature: string): Promise<{ actionId: string; status: string }> {
     const escalation = await this.getAwaitingEscalation(actionId);
     const typedData = JSON.parse(escalation.typed_data);
+    if (Number(typedData.message?.validBefore) <= Math.floor(Date.now() / 1000)) {
+      throw new BadRequestException(
+        `The payment authorization for action ${actionId} has expired; the agent must request payment again`,
+      );
+    }
     const types = { ...(typedData.types || {}) };
     delete types.EIP712Domain;
 

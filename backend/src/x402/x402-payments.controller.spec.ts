@@ -325,6 +325,24 @@ describe('X402PaymentsController', () => {
 
       await expect(controller.approve(actionId, { signature })).rejects.toThrow(UnauthorizedException);
     });
+
+    it('refuses to approve once the payment authorization has expired', async () => {
+      const actionId = await escalateAction();
+      const typedData = buildEscalationTypedData();
+      const signature = await approverWallet.signTypedData(
+        typedData.domain,
+        typedData.types,
+        typedData.message,
+      );
+      const dateNow = jest.spyOn(Date, 'now').mockReturnValue((typedData.message.validBefore + 1) * 1000);
+
+      try {
+        await expect(controller.approve(actionId, { signature })).rejects.toThrow(BadRequestException);
+      } finally {
+        dateNow.mockRestore();
+      }
+      expect(actionStore.getAction(actionId)?.status).toBe(TreasuryActionStatus.PENDING);
+    });
   });
 
   describe('reject', () => {
@@ -453,7 +471,8 @@ describe('X402PaymentsController', () => {
       });
 
       const pending = await controller.getPendingApprovals();
-      expect(pending.some((p) => p.actionId === result.actionId)).toBe(true);
+      const entry = pending.find((p) => p.actionId === result.actionId);
+      expect(entry?.reasons).toEqual(['Amount exceeds the autonomous limit.']);
     });
 
     it('returns the approver config', () => {

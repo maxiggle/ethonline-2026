@@ -183,11 +183,12 @@ It polls `POST /x402/purchase-requests/claim` every 5 seconds, pays the oldest q
   - The spending policy (network, USDC asset, approved payee, per-payment and daily limits) runs before any payment signature exists.
   - Escalation typed data is checked against the Guardian's record (payer = Ledger, payee, amount, token, chain, expiry). The approval must recover to the Ledger address.
   - Settlement is confirmed by reading the USDC `Transfer` log on-chain.
+- **Human verification with World ID is designed but not enforced yet.** Escalated approvals currently require only the Ledger signature. The World ID Selfie Check verification service is built and tested, but World hasn't approved Selfie Check for this app, and enforcing it now would block every approval. Design and rollout plan: [`docs/world-id-approval-gate.md`](docs/world-id-approval-gate.md).
 - **The legacy Safe / `Chapter2Guard` execution path and the `/vendor/*` rail aren't used by the x402 demo.** The deployed Guard's owner / `humanSigner` key was exposed and must be rotated before that path is used again (PAY-001).
 - **Single-instance state:**
   - The agent-signature replay cache, the legacy `/vendor/*` receipt replay protection, and the escalation reasons awaiting typed data are all held per backend instance.
   - Settlement verification has no cross-action replay guard.
-- **The Flutter app** shows x402 actions in its activity timeline but doesn't sign payments yet.
+- **The Flutter app** approves escalated payments on a Ledger over Bluetooth with the v0 hashed EIP-712 command, so the device shows hashes and Blind signing must be on. It never holds the agent's key.
 - **`native_security/` holds iOS/Android biometric plugin prototypes.** The demo doesn't use them, and they aren't production security controls.
 - **Without a Ledger origin token** (`VITE_LEDGER_ORIGIN_TOKEN`), the console still signs, with reduced Ledger-side transaction checks.
 

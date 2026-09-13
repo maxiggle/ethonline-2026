@@ -12,7 +12,7 @@ The gateway provides:
      - `ALLOW`: Commits reservation, marks status `APPROVED`, and emits `action:approved`.
      - `ESCALATE`: Holds reservation, marks status `PENDING`, generates EIP-712 typed data envelope, formats clear-signing prompt, and emits real-time `action:escalated` alert to mobile operators.
      - `BLOCK`: Releases balance reservation, marks status `REJECTED`, and emits `action:blocked`.
-   - Enforces human clear-signing approvals (`POST /actions/:id/approve`), validating EIP-712 cryptographic signatures against authorized hardware or World ID verified operators, refreshing 90-day inactivity timers, and packing Safe execution bytes (`abi.encode(approval, sig)`).
+   - Enforces human clear-signing approvals (`POST /actions/:id/approve`), validating EIP-712 signatures against the Chapter2Guard `humanSigner`. World ID status is refreshed when present but not required (see `docs/world-id-approval-gate.md`).
 2. **World ID Selfie Check Controller** ([WorldController](file:///Users/godwinekainu/.gemini/antigravity-ide/scratch/ethonline-2026/backend/src/world/world.controller.ts)):
    - Exposes REST endpoints for Credential 11 (Selfie Check Beta) zero-knowledge proof verification, human signer binding, 90-day lifecycle status inspection, and revocation.
 3. **Ledger Key Ring Controller** ([LedgerController](file:///Users/godwinekainu/.gemini/antigravity-ide/scratch/ethonline-2026/backend/src/ledger/ledger.controller.ts)):

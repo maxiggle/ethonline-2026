@@ -250,7 +250,7 @@ The backend orchestrator monitors the agent's intent before transactions reach t
    - If `currentDailySpent + currentActiveReservations + requestedAmount > dailyLimit`, the reservation fails immediately, rejecting the proposal before risk analysis.
 
 3. **Human Signer Binding & 90-Day Liveness Window**:
-   - The supervisor's signing address is cryptographically anchored to World ID Credential 11 (Selfie Check Beta).
+   - Designed: the supervisor's signing address is anchored to World ID Credential 11 (Selfie Check Beta). Not enforced yet; see `docs/world-id-approval-gate.md`.
    - The backend records `HumanBinding`:
      - `signerAddress`: Hardware key.
      - `nullifierHash`: Zero-knowledge identity nullifier.
@@ -289,7 +289,8 @@ The mobile command center provides an institutional cockpit where human supervis
      ```
    - The physical confirmation guarantees non-repudiation.
 
-3. **World ID Selfie Check Binding (`onboarding_screen.dart`)**:
+3. **World ID Selfie Check Binding (removed from `onboarding_screen.dart`)**:
+   - The earlier onboarding step simulated this binding and was removed in MOBILE-002; the real flow waits for World Selfie Check access (see `docs/world-id-approval-gate.md`).
    - Supervisor performs facial liveness scan via `packages/agent_security`.
    - Native plugin generates zero-knowledge proof of personhood (Credential 11).
    - Proof is transmitted to `POST /world/selfie/bind`, establishing the 90-day supervisory perimeter.

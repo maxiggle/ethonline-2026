@@ -55,7 +55,7 @@ The **End-to-End Integration Test Suite** ([guardian-lifecycle.e2e.spec.ts](file
 * **Execution & Assertions**:
   - Operator submits Credential 11 (Selfie Check Beta) ZK-proof.
   - Validates biometric facial liveness and binds nullifier to operator address with 90-day window (`SELFIE_INACTIVITY_WINDOW_MS`).
-  - Operator signs escalated transaction; backend validates World ID binding, refreshes `lastActiveAt` via `touchActivity`, and approves action.
+  - Operator signs escalated transaction; if the signer already has an active World ID binding, the backend refreshes `lastActiveAt` via `touchActivity`. Approval does not require a binding yet (see `docs/world-id-approval-gate.md`).
   - **Anti-Sybil Replay Defense**: Validates that attempting to rebind the same nullifier to a second Ethereum address throws `BadRequestException`.
 
 ### Scenario 6: Salami Attack & Rolling Daily Budget Defense

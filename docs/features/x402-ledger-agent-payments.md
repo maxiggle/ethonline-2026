@@ -99,3 +99,4 @@ For ALLOW, the escalation, console and polling steps are skipped and the agent s
 - **No cross-action settlement replay guard.** A transaction hash is verified against one action's token, payee and minimum amount, but isn't marked as consumed across actions.
 - **Public console reads.** `/x402/approvals/pending` exposes pending payment details without a session. Every state change requires a Ledger signature, so the endpoint grants no authority.
 - **Origin token.** Without `VITE_LEDGER_ORIGIN_TOKEN` the console still works, with reduced Ledger-side transaction checks. No value is ever invented.
+- **World ID gate not enforced.** Approvals require the Ledger signature only. Requiring an active World ID Selfie Check binding for the approver is designed ([world-id-approval-gate.md](../world-id-approval-gate.md)) but waits on World approving Selfie Check access.

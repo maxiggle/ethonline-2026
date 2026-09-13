@@ -8,7 +8,8 @@
   "scripts": {
     "build": "NODE_OPTIONS=--max-old-space-size=460 nest build",
     "format": "prettier --write \"src/**/*.ts\"",
-    "start": "nest start",
+    "prestart": "npm run build",
+    "start": "node dist/src/main",
     "start:dev": "nest start --watch",
     "start:prod": "node dist/src/main",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\"",

@@ -703,6 +703,19 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
       return { changes: 1 };
     }
 
+    if (s.startsWith('UPDATE HUMAN_BINDINGS')) {
+      const [expires_at, signer_address] = params;
+      const key = String(signer_address).toLowerCase();
+      const existing = this.state.humanBindings.get(key);
+      if (existing) {
+        existing.expires_at = String(expires_at);
+        this.saveToFile();
+        this.asyncWriteToPostgres(sql, params);
+        return { changes: 1 };
+      }
+      return { changes: 0 };
+    }
+
     if (s.startsWith('DELETE FROM HUMAN_BINDINGS')) {
       const signer = String(params[0]).toLowerCase();
       this.state.humanBindings.delete(signer);

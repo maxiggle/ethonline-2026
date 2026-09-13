@@ -1,10 +1,12 @@
 import 'dart:async';
 
 import 'package:auto_route/auto_route.dart';
+import 'package:chapter2/features/world_id/cubit/world_id_approver_cubit.dart';
 import 'package:chapter2/features/x402_approvals/cubit/x402_approvals_cubit.dart';
 import 'package:chapter2/features/x402_approvals/cubit/x402_approvals_state.dart';
 import 'package:chapter2/features/x402_approvals/remote/models/pending_x402_approval.dart';
 import 'package:chapter2/features/x402_approvals/utils/usdc_amount_formatter.dart';
+import 'package:chapter2/features/x402_approvals/view/widgets/world_id_approver_card.dart';
 import 'package:chapter2/shared/theme/chapter2_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -37,6 +39,7 @@ class _X402ApprovalsScreenState extends State<X402ApprovalsScreen> {
       final cubit = context.read<X402ApprovalsCubit>();
       cubit.loadConfig();
       cubit.startPolling();
+      context.read<WorldIdApproverCubit>().loadStatus();
     });
   }
 
@@ -88,6 +91,8 @@ class _X402ApprovalsScreenState extends State<X402ApprovalsScreen> {
               padding: const EdgeInsets.all(16),
               children: [
                 _buildLedgerConnectionCard(context, state),
+                const SizedBox(height: 16),
+                const WorldIdApproverCard(),
                 const SizedBox(height: 16),
                 _buildBlindSigningHint(context),
                 const SizedBox(height: 16),
@@ -241,6 +246,11 @@ class _X402ApprovalsScreenState extends State<X402ApprovalsScreen> {
     final isBusy = state.status == X402ApprovalsStatus.awaitingDevice && state.awaitingActionId == approval.actionId;
     final canAct = isLedgerReady && !isExpired && !isBusy;
 
+    final worldIdState = context.watch<WorldIdApproverCubit>().state;
+    final isWorldIdBlocked = worldIdState.isWorldIdRequired && !worldIdState.isVerified;
+    final canApprove = canAct && !isWorldIdBlocked;
+    final canReject = canAct;
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -305,7 +315,7 @@ class _X402ApprovalsScreenState extends State<X402ApprovalsScreen> {
             children: [
               Expanded(
                 child: OutlinedButton(
-                  onPressed: canAct ? () => context.read<X402ApprovalsCubit>().reject(approval.actionId) : null,
+                  onPressed: canReject ? () => context.read<X402ApprovalsCubit>().reject(approval.actionId) : null,
                   style: OutlinedButton.styleFrom(foregroundColor: AppColors.block),
                   child: const Text('Reject'),
                 ),
@@ -313,7 +323,7 @@ class _X402ApprovalsScreenState extends State<X402ApprovalsScreen> {
               const SizedBox(width: 12),
               Expanded(
                 child: ElevatedButton(
-                  onPressed: canAct ? () => context.read<X402ApprovalsCubit>().approve(approval.actionId) : null,
+                  onPressed: canApprove ? () => context.read<X402ApprovalsCubit>().approve(approval.actionId) : null,
                   style: ElevatedButton.styleFrom(backgroundColor: AppColors.allow, foregroundColor: Colors.white),
                   child: isBusy
                       ? const SizedBox(

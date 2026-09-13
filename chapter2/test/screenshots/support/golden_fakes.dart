@@ -6,6 +6,8 @@ import 'package:chapter2/features/services/models/bazaar_service.dart';
 import 'package:chapter2/features/services/models/purchase_request.dart';
 import 'package:chapter2/features/services/remote/services_api_service.dart';
 import 'package:chapter2/features/timeline/models/treasury_action.dart';
+import 'package:chapter2/features/world_id/remote/models/world_id_approver_status.dart';
+import 'package:chapter2/features/world_id/remote/world_id_api_service.dart';
 import 'package:chapter2/features/x402_approvals/eip712/eip712_typed_data.dart';
 import 'package:chapter2/features/x402_approvals/ledger/ledger_ble_client.dart';
 import 'package:chapter2/features/x402_approvals/ledger/ledger_ethereum_signer.dart';
@@ -403,4 +405,23 @@ class GoldenServicesApiService extends ServicesApiService {
   }) async {
     throw UnimplementedError('Not exercised by screenshot goldens');
   }
+}
+
+/// A [WorldIdApiService] fake for goldens and widget tests.
+class GoldenWorldIdApiService extends WorldIdApiService {
+  GoldenWorldIdApiService({
+    this.status = const WorldIdApproverStatus(
+      approverAddress: kFixtureApproverAddress,
+      isWorldIdRequired: true,
+      isWorldIdConfigured: true,
+      environment: 'staging',
+      isVerified: true,
+      credential: 'orb',
+    ),
+  }) : super(apiClient: null);
+
+  final WorldIdApproverStatus status;
+
+  @override
+  Future<WorldIdApproverStatus> fetchApproverStatus() async => status;
 }

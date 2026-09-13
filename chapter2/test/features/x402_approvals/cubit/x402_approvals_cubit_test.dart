@@ -199,6 +199,7 @@ void main() {
 
       expect(cubit.state.status, X402ApprovalsStatus.success);
       expect(cubit.state.lastCompletedActionId, 'action-1');
+      expect(cubit.state.awaitingMessage, isNull);
       expect(signer.lastDomainSeparator, isNotNull);
       expect(signer.lastMessageHash, isNotNull);
       expect(api.lastApprovalActionId, 'action-1');
@@ -230,6 +231,7 @@ void main() {
       await cubit.reject('action-1');
 
       expect(cubit.state.status, X402ApprovalsStatus.success);
+      expect(cubit.state.awaitingMessage, isNull);
       expect(signer.lastPersonalMessage, isNotNull);
       expect(String.fromCharCodes(signer.lastPersonalMessage!), 'chapter2-reject:action-1');
       expect(api.lastRejectionActionId, 'action-1');
@@ -258,6 +260,7 @@ void main() {
 
       expect(cubit.state.status, X402ApprovalsStatus.failure);
       expect(cubit.state.errorMessage, 'Rejected on the Ledger');
+      expect(cubit.state.awaitingMessage, isNull);
       expect(api.lastApprovalActionId, isNull);
 
       await cubit.close();
@@ -276,7 +279,7 @@ void main() {
       await cubit.close();
     });
 
-    test('signPersonalMessageOnLedger() signs UTF-8 bytes when ready, restores idle, and returns hex signature', () async {
+    test('signPersonalMessageOnLedger() signs UTF-8 bytes when ready, restores connected, and returns hex signature', () async {
       final api = _FakeX402ApprovalsApiService();
       final signer = _FakeLedgerEthereumSigner(address: _approverAddress)
         ..personalMessageSignature = LedgerSignature(
@@ -300,7 +303,8 @@ void main() {
         '${'06' * 32}'
         '1b',
       );
-      expect(cubit.state.status, X402ApprovalsStatus.idle);
+      expect(cubit.state.status, X402ApprovalsStatus.connected);
+      expect(cubit.state.awaitingMessage, isNull);
       expect(cubit.state.isLedgerReady, isTrue);
 
       await cubit.close();
@@ -322,8 +326,16 @@ void main() {
 
       expect(cubit.state.status, X402ApprovalsStatus.failure);
       expect(cubit.state.errorMessage, 'Rejected on the Ledger');
+      expect(cubit.state.awaitingMessage, isNull);
 
       await cubit.close();
+    });
+
+    test('X402ApprovalsState copyWith clearAwaitingMessage clears awaitingMessage', () {
+      const state = X402ApprovalsState(awaitingMessage: 'Confirm on your Ledger');
+      expect(state.awaitingMessage, 'Confirm on your Ledger');
+      final cleared = state.copyWith(clearAwaitingMessage: true);
+      expect(cleared.awaitingMessage, isNull);
     });
   });
 }

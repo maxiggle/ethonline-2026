@@ -34,7 +34,7 @@ class X402ApprovalsState extends Equatable {
   final String? errorMessage;
   final String? lastCompletedActionId;
 
-  bool get isLedgerReady => connectedAddress != null && matchesApprover;
+  bool get isLedgerReady => status != X402ApprovalsStatus.idle && connectedAddress != null && matchesApprover;
 
   X402ApprovalsState copyWith({
     X402ApprovalsStatus? status,
@@ -45,6 +45,7 @@ class X402ApprovalsState extends Equatable {
     String? awaitingActionId,
     bool clearAwaitingActionId = false,
     String? awaitingMessage,
+    bool clearAwaitingMessage = false,
     String? errorMessage,
     bool clearErrorMessage = false,
     String? lastCompletedActionId,
@@ -56,7 +57,7 @@ class X402ApprovalsState extends Equatable {
       connectedAddress: connectedAddress ?? this.connectedAddress,
       matchesApprover: matchesApprover ?? this.matchesApprover,
       awaitingActionId: clearAwaitingActionId ? null : (awaitingActionId ?? this.awaitingActionId),
-      awaitingMessage: awaitingMessage ?? this.awaitingMessage,
+      awaitingMessage: clearAwaitingMessage ? null : (awaitingMessage ?? this.awaitingMessage),
       errorMessage: clearErrorMessage ? null : (errorMessage ?? this.errorMessage),
       lastCompletedActionId: lastCompletedActionId ?? this.lastCompletedActionId,
     );

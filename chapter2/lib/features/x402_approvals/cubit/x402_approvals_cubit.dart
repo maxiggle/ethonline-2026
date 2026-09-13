@@ -144,6 +144,7 @@ class X402ApprovalsCubit extends Cubit<X402ApprovalsState> {
         status: X402ApprovalsStatus.success,
         lastCompletedActionId: actionId,
         clearAwaitingActionId: true,
+        clearAwaitingMessage: true,
       ));
       await refreshPendingApprovals();
     } catch (error) {
@@ -151,6 +152,7 @@ class X402ApprovalsCubit extends Cubit<X402ApprovalsState> {
         status: X402ApprovalsStatus.failure,
         errorMessage: _describeError(error),
         clearAwaitingActionId: true,
+        clearAwaitingMessage: true,
       ));
     }
   }
@@ -180,6 +182,7 @@ class X402ApprovalsCubit extends Cubit<X402ApprovalsState> {
         status: X402ApprovalsStatus.success,
         lastCompletedActionId: actionId,
         clearAwaitingActionId: true,
+        clearAwaitingMessage: true,
       ));
       await refreshPendingApprovals();
     } catch (error) {
@@ -187,6 +190,7 @@ class X402ApprovalsCubit extends Cubit<X402ApprovalsState> {
         status: X402ApprovalsStatus.failure,
         errorMessage: _describeError(error),
         clearAwaitingActionId: true,
+        clearAwaitingMessage: true,
       ));
     }
   }
@@ -207,8 +211,8 @@ class X402ApprovalsCubit extends Cubit<X402ApprovalsState> {
       final bytes = Uint8List.fromList(utf8.encode(message));
       final signature = await signer.signPersonalMessage(bytes);
       emit(state.copyWith(
-        status: X402ApprovalsStatus.idle,
-        awaitingMessage: null,
+        status: X402ApprovalsStatus.connected,
+        clearAwaitingMessage: true,
       ));
       return signature.toHex();
     } catch (error) {
@@ -216,7 +220,7 @@ class X402ApprovalsCubit extends Cubit<X402ApprovalsState> {
       emit(state.copyWith(
         status: X402ApprovalsStatus.failure,
         errorMessage: described,
-        awaitingMessage: null,
+        clearAwaitingMessage: true,
       ));
       throw Exception(described);
     }

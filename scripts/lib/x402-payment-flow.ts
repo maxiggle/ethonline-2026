@@ -165,6 +165,8 @@ export interface PayResourceDeps {
   fetchImpl?: typeof fetch;
   agentFetch?: typeof signedAgentFetch;
   onWaitingForApproval?: () => void;
+  /** Called with the Guardian's authorization response right after `authorizePayment`, before any signer is touched. */
+  onAuthorized?: (authorization: AuthorizePaymentResponse) => Promise<void>;
 }
 
 export type PayResourceResult =
@@ -209,13 +211,19 @@ export async function payX402Resource(deps: PayResourceDeps): Promise<PayResourc
 
   const paymentRequirements = selectPaymentRequirement(paymentRequired, deps.network, deps.usdcAddress);
 
-  const outcome = await authorizeAndResolvePaymentSigner({
+  const authorization = await authorizePayment({
     baseUrl: deps.baseUrl,
     agentAccount: deps.agentAccount,
     agentFetch: deps.agentFetch,
     resourceUrl,
     paymentRequirements,
     justification: deps.justification,
+  });
+
+  await deps.onAuthorized?.(authorization);
+
+  const outcome = resolvePaymentSigner({
+    authorization,
     agentEvmSigner: deps.agentEvmSigner,
     createLedgerSigner: deps.createLedgerSigner,
   });

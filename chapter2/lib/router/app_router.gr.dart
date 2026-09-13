@@ -11,58 +11,6 @@
 part of 'app_router.dart';
 
 /// generated route for
-/// [DashboardScreen]
-class DashboardRoute extends PageRouteInfo<DashboardRouteArgs> {
-  DashboardRoute({
-    Key? key,
-    void Function(int)? onNavigateToTab,
-    List<PageRouteInfo>? children,
-  }) : super(
-         DashboardRoute.name,
-         args: DashboardRouteArgs(key: key, onNavigateToTab: onNavigateToTab),
-         initialChildren: children,
-       );
-
-  static const String name = 'DashboardRoute';
-
-  static PageInfo page = PageInfo(
-    name,
-    builder: (data) {
-      final args = data.argsAs<DashboardRouteArgs>(
-        orElse: () => const DashboardRouteArgs(),
-      );
-      return DashboardScreen(
-        key: args.key,
-        onNavigateToTab: args.onNavigateToTab,
-      );
-    },
-  );
-}
-
-class DashboardRouteArgs {
-  const DashboardRouteArgs({this.key, this.onNavigateToTab});
-
-  final Key? key;
-
-  final void Function(int)? onNavigateToTab;
-
-  @override
-  String toString() {
-    return 'DashboardRouteArgs{key: $key, onNavigateToTab: $onNavigateToTab}';
-  }
-
-  @override
-  bool operator ==(Object other) {
-    if (identical(this, other)) return true;
-    if (other is! DashboardRouteArgs) return false;
-    return key == other.key;
-  }
-
-  @override
-  int get hashCode => key.hashCode;
-}
-
-/// generated route for
 /// [LoginScreen]
 class LoginRoute extends PageRouteInfo<LoginRouteArgs> {
   LoginRoute({
@@ -174,6 +122,22 @@ class OnboardingRouteArgs {
 
   @override
   int get hashCode => key.hashCode ^ initialStep.hashCode;
+}
+
+/// generated route for
+/// [SettingsScreen]
+class SettingsRoute extends PageRouteInfo<void> {
+  const SettingsRoute({List<PageRouteInfo>? children})
+    : super(SettingsRoute.name, initialChildren: children);
+
+  static const String name = 'SettingsRoute';
+
+  static PageInfo page = PageInfo(
+    name,
+    builder: (data) {
+      return const SettingsScreen();
+    },
+  );
 }
 
 /// generated route for

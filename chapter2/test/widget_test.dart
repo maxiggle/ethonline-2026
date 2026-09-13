@@ -9,8 +9,9 @@ import 'package:chapter2/features/auth/models/user_identity.dart';
 import 'package:chapter2/features/auth/services/auth_service.dart';
 import 'package:chapter2/features/dashboard/cubit/dashboard_cubit.dart';
 import 'package:chapter2/features/dashboard/view/dashboard_screen.dart';
-import 'package:chapter2/features/approval/cubit/approval_cubit.dart';
-import 'package:chapter2/features/bills/cubit/bills_cubit.dart';
+import 'package:chapter2/features/x402_approvals/cubit/x402_approvals_cubit.dart';
+import 'package:chapter2/features/x402_approvals/ledger/ledger_ble_client.dart';
+import 'package:chapter2/features/x402_approvals/remote/x402_approvals_api_service.dart';
 import 'package:chapter2/services/api/chapter2_api_service.dart';
 import 'package:chapter2/shared/theme/chapter2_theme.dart';
 
@@ -33,7 +34,7 @@ void main() {
     expect(find.text('Sign In with Privy'), findsOneWidget);
   });
 
-  testWidgets('DashboardScreen renders authenticated dashboard layout and controls', (WidgetTester tester) async {
+  testWidgets('DashboardScreen (Home) renders the agent card, Ledger card and activity feed', (WidgetTester tester) async {
     final authCubit = AuthCubit(authService: locator<AuthService>());
     authCubit.emit(const AuthState(
       status: AuthStatus.authenticated,
@@ -45,31 +46,29 @@ void main() {
     ));
 
     final dashboardCubit = DashboardCubit(apiService: locator<Chapter2ApiService>());
-    final approvalCubit = ApprovalCubit(apiService: locator<Chapter2ApiService>());
-    final billsCubit = BillsCubit(apiService: locator<Chapter2ApiService>());
+    final x402Cubit = X402ApprovalsCubit(
+      apiService: locator<X402ApprovalsApiService>(),
+      ledgerBleClient: locator<LedgerBleClient>(),
+    );
 
     await tester.pumpWidget(
       MultiBlocProvider(
         providers: [
           BlocProvider<AuthCubit>.value(value: authCubit),
           BlocProvider<DashboardCubit>.value(value: dashboardCubit),
-          BlocProvider<ApprovalCubit>.value(value: approvalCubit),
-          BlocProvider<BillsCubit>.value(value: billsCubit),
+          BlocProvider<X402ApprovalsCubit>.value(value: x402Cubit),
         ],
         child: MaterialApp(
           theme: Chapter2Theme.darkTheme,
-          home: const DashboardScreen(),
+          home: const Scaffold(body: DashboardScreen()),
         ),
       ),
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('USD · Base Sepolia'), findsOneWidget);
-    expect(find.text('Mandate'), findsOneWidget);
-    expect(find.text('Clear-Sign'), findsOneWidget);
-    expect(find.text('+ Agent'), findsOneWidget);
-    expect(find.text('Supervised Agents'), findsOneWidget);
-    expect(find.text("Today's Limit"), findsOneWidget);
+    expect(find.text('Chapter 2'), findsOneWidget);
+    expect(find.text('Your Agent'), findsOneWidget);
+    expect(find.text('Ledger Approvals'), findsOneWidget);
     expect(find.text('Recent Activity'), findsOneWidget);
   });
 }

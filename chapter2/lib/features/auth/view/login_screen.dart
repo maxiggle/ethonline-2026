@@ -16,7 +16,7 @@ class LoginScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.screenBackground,
+      backgroundColor: AppColors.background,
       body: BlocConsumer<AuthCubit, AuthState>(
         listener: (context, state) {
           if (state.isAuthenticated) {
@@ -25,7 +25,7 @@ class LoginScreen extends StatelessWidget {
               context.router.replace(OnboardingRoute());
             } else {
               context.read<DashboardCubit>().loadDashboardMetrics();
-              context.router.replace(DashboardRoute());
+              context.router.replace(MainShellRoute());
             }
           }
           if (state.status == AuthStatus.error && state.errorMessage != null) {
@@ -63,15 +63,15 @@ class LoginScreen extends StatelessWidget {
                         width: 72,
                         height: 72,
                         decoration: BoxDecoration(
-                          color: AppColors.actionPillBackground,
+                          color: AppColors.surfaceRaised,
                           borderRadius: BorderRadius.circular(22),
                           border: Border.all(
-                            color: AppColors.actionPillBorder,
+                            color: AppColors.border,
                             width: 1.5,
                           ),
                           boxShadow: [
                             BoxShadow(
-                              color: AppColors.brandPrimary.withValues(
+                              color: AppColors.primary.withValues(
                                 alpha: 0.25,
                               ),
                               blurRadius: 28,
@@ -82,7 +82,7 @@ class LoginScreen extends StatelessWidget {
                         child: const Icon(
                           Icons.shield_rounded,
                           size: 38,
-                          color: AppColors.brandPrimary,
+                          color: AppColors.primary,
                         ),
                       ),
                     ),
@@ -103,7 +103,7 @@ class LoginScreen extends StatelessWidget {
                       textAlign: TextAlign.center,
                       style: AppTextStyles.md(
                         context,
-                        color: AppColors.textLightMuted,
+                        color: AppColors.textMuted,
                         fontWeight: AppTextStyles.medium,
                       ),
                     ),
@@ -115,9 +115,9 @@ class LoginScreen extends StatelessWidget {
                         vertical: 20,
                       ),
                       decoration: BoxDecoration(
-                        color: AppColors.actionPillBackground,
+                        color: AppColors.surfaceRaised,
                         borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: AppColors.actionPillBorder),
+                        border: Border.all(color: AppColors.border),
                       ),
                       child: Column(
                         children: [
@@ -128,7 +128,7 @@ class LoginScreen extends StatelessWidget {
                                 icon: Icons.smart_toy_rounded,
                                 title: 'AI Agent',
                                 subtitle: 'Acts',
-                                color: AppColors.brandPrimary,
+                                color: AppColors.primary,
                               ),
                               _buildConnector(),
                               _buildNode(
@@ -154,7 +154,7 @@ class LoginScreen extends StatelessWidget {
                             textAlign: TextAlign.center,
                             style: AppTextStyles.xs(
                               context,
-                              color: AppColors.textLightMuted,
+                              color: AppColors.textMuted,
                             ),
                           ),
                         ],
@@ -170,7 +170,7 @@ class LoginScreen extends StatelessWidget {
                             : () => context.read<AuthCubit>().loginWithGoogle(),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.white,
-                          foregroundColor: AppColors.screenBackground,
+                          foregroundColor: AppColors.background,
                           elevation: 0,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(16),
@@ -183,7 +183,7 @@ class LoginScreen extends StatelessWidget {
                                 child: CircularProgressIndicator(
                                   strokeWidth: 2.5,
                                   valueColor: AlwaysStoppedAnimation<Color>(
-                                    AppColors.screenBackground,
+                                    AppColors.background,
                                   ),
                                 ),
                               )
@@ -193,14 +193,14 @@ class LoginScreen extends StatelessWidget {
                                   const Icon(
                                     Icons.login_rounded,
                                     size: 20,
-                                    color: AppColors.screenBackground,
+                                    color: AppColors.background,
                                   ),
                                   const SizedBox(width: 10),
                                   Text(
                                     'Sign In with Privy',
                                     style: AppTextStyles.md(
                                       context,
-                                      color: AppColors.screenBackground,
+                                      color: AppColors.background,
                                       fontWeight: AppTextStyles.bold,
                                     ),
                                   ),
@@ -226,7 +226,7 @@ class LoginScreen extends StatelessWidget {
                                         ),
                                       ),
                                       backgroundColor:
-                                          AppColors.actionPillBackground,
+                                          AppColors.surfaceRaised,
                                       behavior: SnackBarBehavior.floating,
                                       duration: const Duration(seconds: 2),
                                       shape: RoundedRectangleBorder(
@@ -239,13 +239,13 @@ class LoginScreen extends StatelessWidget {
                         icon: const Icon(
                           Icons.refresh_rounded,
                           size: 14,
-                          color: AppColors.textLightMuted,
+                          color: AppColors.textMuted,
                         ),
                         label: Text(
                           'Reset Cached Session',
                           style: AppTextStyles.xs(
                             context,
-                            color: AppColors.textLightMuted,
+                            color: AppColors.textMuted,
                           ),
                         ),
                       ),
@@ -260,7 +260,7 @@ class LoginScreen extends StatelessWidget {
                           'Learn how it works',
                           style: AppTextStyles.xs(
                             context,
-                            color: AppColors.brandPrimary,
+                            color: AppColors.primary,
                             fontWeight: AppTextStyles.bold,
                           ),
                         ),
@@ -272,7 +272,7 @@ class LoginScreen extends StatelessWidget {
                       textAlign: TextAlign.center,
                       style: AppTextStyles.xs(
                         context,
-                        color: AppColors.textLightMuted.withValues(alpha: 0.7),
+                        color: AppColors.textMuted.withValues(alpha: 0.7),
                       ),
                     ),
                   ],
@@ -329,7 +329,7 @@ class LoginScreen extends StatelessWidget {
   Widget _buildConnector() {
     return SizedBox(
       width: 20,
-      child: Divider(color: AppColors.actionPillBorder, thickness: 1.5),
+      child: Divider(color: AppColors.border, thickness: 1.5),
     );
   }
 }

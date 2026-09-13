@@ -10,8 +10,6 @@ class TreasuryMandate extends Equatable {
     required this.safeAddress,
     required this.guardAddress,
     this.autonomousAgent = '',
-    this.totalTreasuryBalanceUsdc = 10.0,
-    this.treasuryEthBalance = '0.001',
   });
 
   final double maxAutonomousAmountUsdc;
@@ -22,8 +20,6 @@ class TreasuryMandate extends Equatable {
   final String safeAddress;
   final String guardAddress;
   final String autonomousAgent;
-  final double totalTreasuryBalanceUsdc;
-  final String treasuryEthBalance;
 
   double get remainingDailyBudgetUsdc =>
       (dailyAutonomousLimitUsdc - currentDailySpentUsdc).clamp(0.0, dailyAutonomousLimitUsdc);
@@ -37,8 +33,6 @@ class TreasuryMandate extends Equatable {
       maxAutonomousAmountUsdc: (json['maxAutonomousAmountUsdc'] as num?)?.toDouble() ?? 100.0,
       dailyAutonomousLimitUsdc: (json['dailyAutonomousLimitUsdc'] as num?)?.toDouble() ?? 500.0,
       currentDailySpentUsdc: (json['currentDailySpentUsdc'] as num?)?.toDouble() ?? 0.0,
-      totalTreasuryBalanceUsdc: (json['totalTreasuryBalanceUsdc'] as num?)?.toDouble() ?? 10.0,
-      treasuryEthBalance: (json['treasuryEthBalance'] ?? '0.001').toString(),
       approvedRecipients: (json['approvedRecipients'] as List<dynamic>?)
               ?.map((e) => e.toString())
               .toList() ??

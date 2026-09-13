@@ -58,7 +58,7 @@ class _SplashScreenState extends State<SplashScreen>
         context.router.replace(OnboardingRoute());
       } else {
         context.read<DashboardCubit>().loadDashboardMetrics();
-        context.router.replace(DashboardRoute());
+        context.router.replace(MainShellRoute());
       }
     } else {
       context.router.replace(LoginRoute());
@@ -77,11 +77,11 @@ class _SplashScreenState extends State<SplashScreen>
       listener: (context, state) {
         if (state.isAuthenticated && mounted) {
           context.read<DashboardCubit>().loadDashboardMetrics();
-          context.router.replace(DashboardRoute());
+          context.router.replace(MainShellRoute());
         }
       },
       child: Scaffold(
-        backgroundColor: Chapter2Theme.background,
+        backgroundColor: AppColors.background,
         body: Center(
           child: FadeTransition(
             opacity: _fadeAnimation,
@@ -142,7 +142,7 @@ class _SplashScreenState extends State<SplashScreen>
                     child: CircularProgressIndicator(
                       strokeWidth: 2.5,
                       valueColor: AlwaysStoppedAnimation<Color>(
-                        Chapter2Theme.primaryCyan,
+                        AppColors.primary,
                       ),
                     ),
                   ),

@@ -909,6 +909,24 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     }
 
     if (s.startsWith('UPDATE AGENT') || s.startsWith('UPDATE "AGENT"')) {
+      if (s.includes('WHERE ID =')) {
+        const [userId, name, purpose, safeAddress, guardAddress, chainId, status, updatedAt, id] = params;
+        const agent = this.state.agents.get(id);
+        if (!agent) {
+          return { changes: 0 };
+        }
+        agent.userId = userId;
+        agent.name = name;
+        agent.purpose = purpose || null;
+        agent.safeAddress = safeAddress;
+        agent.guardAddress = guardAddress;
+        agent.chainId = Number(chainId || 84532);
+        agent.status = status;
+        agent.updatedAt = String(updatedAt);
+        this.saveToFile();
+        this.asyncWriteToPostgres(sql, params);
+        return { changes: 1 };
+      }
       if (s.includes('STATUS =')) {
         const [status, updatedAt, userId] = params;
         for (const agent of this.state.agents.values()) {

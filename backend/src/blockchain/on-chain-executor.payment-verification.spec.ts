@@ -25,7 +25,7 @@ describe('OnChainExecutorService.verifyTokenTransfer', () => {
   const txHash = '0x' + '1'.repeat(64);
 
   beforeEach(() => {
-    service = new OnChainExecutorService({} as any, {} as any, {} as any, {} as any);
+    service = new OnChainExecutorService();
   });
 
   it('verifies a payment when the transfer meets the minimum amount', async () => {

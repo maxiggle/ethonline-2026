@@ -1,23 +1,11 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { OnChainExecutorService } from './on-chain-executor.service';
-import { ActionStoreService } from '../actions/action-store.service';
-import { PolicyEngineService } from '../policies/policy-engine.service';
-import { Eip712Service } from '../crypto/eip712.service';
-import { EventsGateway } from '../gateway/events.gateway';
-import { TreasuryActionStatus } from '../domain/treasury-action.entity';
-import { Server } from 'socket.io';
 
 describe('OnChainExecutorService (Tested with Actual On-Chain Data)', () => {
   let service: OnChainExecutorService;
-  let actionStore: ActionStoreService;
-  let gateway: EventsGateway;
-  let mockServer: Partial<Server>;
 
   const realSafeAddress = process.env.SAFE_ADDRESS!;
   const realGuardAddress = process.env.GUARD_ADDRESS!;
-  const realRelayerKey = process.env.RELAYER_PRIVATE_KEY!;
-  const realRpcUrl = process.env.RPC_URL!;
-  const realChainId = process.env.CHAIN_ID!;
 
   // Real mined Base Sepolia transactions
   const GUARD_DEPLOY_TX = '0x86fe4afdb35ffafdc67fba833eeb4b68657e1539564f01c08d431106402347c5';
@@ -26,24 +14,11 @@ describe('OnChainExecutorService (Tested with Actual On-Chain Data)', () => {
   jest.setTimeout(45000);
 
   beforeEach(async () => {
-    mockServer = {
-      emit: jest.fn(),
-    };
-
     const module: TestingModule = await Test.createTestingModule({
-      providers: [
-        OnChainExecutorService,
-        ActionStoreService,
-        PolicyEngineService,
-        Eip712Service,
-        EventsGateway,
-      ],
+      providers: [OnChainExecutorService],
     }).compile();
 
     service = module.get<OnChainExecutorService>(OnChainExecutorService);
-    actionStore = module.get<ActionStoreService>(ActionStoreService);
-    gateway = module.get<EventsGateway>(EventsGateway);
-    gateway.server = mockServer as Server;
   });
 
   it('should initialize successfully with live Base Sepolia contracts', () => {
@@ -54,7 +29,28 @@ describe('OnChainExecutorService (Tested with Actual On-Chain Data)', () => {
     expect(service.safeContract).toBeDefined();
     expect(service.guardContract).toBeDefined();
     expect(service.provider).toBeDefined();
-    expect(service.relayerWallet.address).toBe('0x988B225185b516DEF12A7Ec841abae9072ef4EE8');
+  });
+
+  describe('Read-only (no signing key)', () => {
+    it('initializes without RELAYER_PRIVATE_KEY', () => {
+      const orig = process.env.RELAYER_PRIVATE_KEY;
+      delete process.env.RELAYER_PRIVATE_KEY;
+      try {
+        expect(() => new OnChainExecutorService()).not.toThrow();
+      } finally {
+        if (orig !== undefined) {
+          process.env.RELAYER_PRIVATE_KEY = orig;
+        }
+      }
+    });
+
+    it('exposes no transaction-broadcasting methods', () => {
+      const methods = service as unknown as Record<string, unknown>;
+      expect(methods.executeAutonomousPayment).toBeUndefined();
+      expect(methods.executeEscalatedPayment).toBeUndefined();
+      expect(methods.setAutonomousAgent).toBeUndefined();
+      expect(methods.relayerWallet).toBeUndefined();
+    });
   });
 
   describe('Environment Variable Validations (Strict Zero-Fallback Policy)', () => {
@@ -62,9 +58,7 @@ describe('OnChainExecutorService (Tested with Actual On-Chain Data)', () => {
       const orig = process.env.RPC_URL;
       delete process.env.RPC_URL;
       try {
-        expect(() => {
-          new OnChainExecutorService(actionStore, {} as any, {} as any, gateway);
-        }).toThrow('Missing required environment variable: RPC_URL');
+        expect(() => new OnChainExecutorService()).toThrow('Missing required environment variable: RPC_URL');
       } finally {
         process.env.RPC_URL = orig;
       }
@@ -74,9 +68,7 @@ describe('OnChainExecutorService (Tested with Actual On-Chain Data)', () => {
       const orig = process.env.SAFE_ADDRESS;
       delete process.env.SAFE_ADDRESS;
       try {
-        expect(() => {
-          new OnChainExecutorService(actionStore, {} as any, {} as any, gateway);
-        }).toThrow('Missing required environment variable: SAFE_ADDRESS');
+        expect(() => new OnChainExecutorService()).toThrow('Missing required environment variable: SAFE_ADDRESS');
       } finally {
         process.env.SAFE_ADDRESS = orig;
       }
@@ -86,23 +78,9 @@ describe('OnChainExecutorService (Tested with Actual On-Chain Data)', () => {
       const orig = process.env.GUARD_ADDRESS;
       delete process.env.GUARD_ADDRESS;
       try {
-        expect(() => {
-          new OnChainExecutorService(actionStore, {} as any, {} as any, gateway);
-        }).toThrow('Missing required environment variable: GUARD_ADDRESS');
+        expect(() => new OnChainExecutorService()).toThrow('Missing required environment variable: GUARD_ADDRESS');
       } finally {
         process.env.GUARD_ADDRESS = orig;
-      }
-    });
-
-    it('should throw immediately if RELAYER_PRIVATE_KEY is missing', () => {
-      const orig = process.env.RELAYER_PRIVATE_KEY;
-      delete process.env.RELAYER_PRIVATE_KEY;
-      try {
-        expect(() => {
-          new OnChainExecutorService(actionStore, {} as any, {} as any, gateway);
-        }).toThrow('Missing required environment variable: RELAYER_PRIVATE_KEY');
-      } finally {
-        process.env.RELAYER_PRIVATE_KEY = orig;
       }
     });
 
@@ -110,9 +88,7 @@ describe('OnChainExecutorService (Tested with Actual On-Chain Data)', () => {
       const orig = process.env.CHAIN_ID;
       delete process.env.CHAIN_ID;
       try {
-        expect(() => {
-          new OnChainExecutorService(actionStore, {} as any, {} as any, gateway);
-        }).toThrow('Missing required environment variable: CHAIN_ID');
+        expect(() => new OnChainExecutorService()).toThrow('Missing required environment variable: CHAIN_ID');
       } finally {
         process.env.CHAIN_ID = orig;
       }
@@ -144,7 +120,7 @@ describe('OnChainExecutorService (Tested with Actual On-Chain Data)', () => {
       const safeConfig = await service.getOnChainSafeConfig();
 
       expect(safeConfig.guardAddress.toLowerCase()).toBe(realGuardAddress.toLowerCase());
-      expect(safeConfig.owner.toLowerCase()).toBe(service.relayerWallet.address.toLowerCase());
+      expect(safeConfig.owner).toMatch(/^0x[a-fA-F0-9]{40}$/);
       expect(safeConfig.nonce).toBeGreaterThanOrEqual(0n);
     }, 15000);
   });
@@ -179,47 +155,6 @@ describe('OnChainExecutorService (Tested with Actual On-Chain Data)', () => {
       const result = await service.verifyTransaction('not-a-hash');
       expect(result.verified).toBe(false);
       expect(result.error).toContain('Invalid transaction hash format');
-    });
-  });
-
-  describe('Actual On-Chain Autonomous Execution & Settlement', () => {
-    it('should broadcast and mine real Safe transaction on Base Sepolia and verify on-chain receipt', async () => {
-      const action = actionStore.createAction({
-        target: realSafeAddress,
-        value: '0',
-        data: '0x',
-        token: realSafeAddress,
-        recipient: '0x0000000000000000000000000000000000041c4e',
-        amount: '40000000',
-        agentAddress: '0x1111111111111111111111111111111111111111',
-        justification: 'Real on-chain autonomous test payment to vendor',
-      });
-
-      const result = await service.executeAutonomousPayment(action);
-
-      // Verify on-chain execution result
-      expect(result.status).toBe(TreasuryActionStatus.EXECUTED);
-      expect(result.txHash).toMatch(/^0x[a-fA-F0-9]{64}$/);
-      expect(result.receipt.status).toBe(1);
-
-      // Verify action was persisted as EXECUTED with real txHash
-      const stored = actionStore.getAction(action.id);
-      expect(stored?.status).toBe(TreasuryActionStatus.EXECUTED);
-      expect(stored?.txHash).toBe(result.txHash);
-
-      // Verify event was emitted
-      expect(mockServer.emit).toHaveBeenCalledWith(
-        'action:executed',
-        expect.objectContaining({
-          action: expect.objectContaining({ id: action.id, status: 'EXECUTED' }),
-          txHash: result.txHash,
-        }),
-      );
-
-      // Verify the broadcasted tx using verifyTransaction against Base Sepolia provider
-      const verification = await service.verifyTransaction(result.txHash);
-      expect(verification.verified).toBe(true);
-      expect(verification.receipt?.status).toBe(1);
     });
   });
 });

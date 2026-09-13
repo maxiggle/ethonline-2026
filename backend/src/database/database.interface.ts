@@ -62,3 +62,23 @@ export interface X402EscalationRow {
   created_at: string;
   updated_at: string;
 }
+
+export interface X402PurchaseRequestRow {
+  id: string;
+  user_id: string;
+  agent_address: string;
+  service_name: string;
+  resource_url: string;
+  query_params: string; // JSON string
+  justification: string;
+  amount: string;
+  status: 'QUEUED' | 'PROCESSING' | 'AUTHORIZED' | 'PAID' | 'BLOCKED' | 'REJECTED' | 'EXPIRED' | 'FAILED';
+  action_id: string | null;
+  decision: 'ALLOW' | 'ESCALATE' | 'BLOCK' | null;
+  reasons: string; // JSON string array
+  transaction_hash: string | null;
+  response: string | null; // JSON string
+  error: string | null;
+  created_at: string;
+  updated_at: string;
+}

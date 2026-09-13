@@ -120,4 +120,107 @@ describe('DatabaseService', () => {
     expect(signed.status).toBe('SIGNED');
     expect(signed.signature).toBe('0xdeadbeef');
   });
+
+  describe('x402_purchase_requests', () => {
+    const agentAddress = '0x2222222222222222222222222222222222222222';
+
+    function insertRequest(id: string, createdAt: string) {
+      return service.run(
+        `INSERT INTO x402_purchase_requests (
+          id, user_id, agent_address, service_name, resource_url, query_params, justification,
+          amount, status, action_id, decision, reasons, transaction_hash, response, error,
+          created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          id,
+          'did:privy:owner',
+          agentAddress,
+          'Open-Meteo Weather Oracle',
+          'https://example.com/x402/weather',
+          '{"city":"Lagos"}',
+          'brief the morning report',
+          '10000',
+          'QUEUED',
+          null,
+          null,
+          '[]',
+          null,
+          null,
+          null,
+          createdAt,
+          createdAt,
+        ],
+      );
+    }
+
+    it('inserts a purchase request and reads it back', async () => {
+      const insertResult = await insertRequest('pr_test_1', new Date().toISOString());
+      expect(insertResult.changes).toBe(1);
+
+      const row = await service.getOne('SELECT * FROM x402_purchase_requests WHERE id = ?', ['pr_test_1']);
+      expect(row).toBeDefined();
+      expect(row.status).toBe('QUEUED');
+      expect(row.agent_address).toBe(agentAddress);
+      expect(JSON.parse(row.query_params)).toEqual({ city: 'Lagos' });
+    });
+
+    it('claims the oldest QUEUED request atomically and refuses a second claim of the same row', async () => {
+      await insertRequest('pr_test_old', new Date(Date.now() - 60_000).toISOString());
+      await insertRequest('pr_test_new', new Date().toISOString());
+
+      const rows = await service.query(
+        'SELECT * FROM x402_purchase_requests WHERE agent_address = ? ORDER BY created_at ASC',
+        [agentAddress],
+      );
+      expect(rows[0].id).toBe('pr_test_old');
+
+      const firstClaim = await service.run(
+        `UPDATE x402_purchase_requests SET status = ?, updated_at = ? WHERE id = ? AND status = 'QUEUED'`,
+        ['PROCESSING', new Date().toISOString(), 'pr_test_old'],
+      );
+      expect(firstClaim.changes).toBe(1);
+
+      const secondClaim = await service.run(
+        `UPDATE x402_purchase_requests SET status = ?, updated_at = ? WHERE id = ? AND status = 'QUEUED'`,
+        ['PROCESSING', new Date().toISOString(), 'pr_test_old'],
+      );
+      expect(secondClaim.changes).toBe(0);
+
+      const claimed = await service.getOne('SELECT * FROM x402_purchase_requests WHERE id = ?', ['pr_test_old']);
+      expect(claimed.status).toBe('PROCESSING');
+    });
+
+    it('records a PAID result with a transaction hash and response payload', async () => {
+      await insertRequest('pr_test_result', new Date().toISOString());
+      await service.run(
+        `UPDATE x402_purchase_requests SET status = ?, updated_at = ? WHERE id = ? AND status = 'QUEUED'`,
+        ['PROCESSING', new Date().toISOString(), 'pr_test_result'],
+      );
+      await service.run(
+        `UPDATE x402_purchase_requests SET status = ?, action_id = ?, decision = ?, reasons = ?, updated_at = ? WHERE id = ?`,
+        ['AUTHORIZED', 'act_test_result', 'ALLOW', '[]', new Date().toISOString(), 'pr_test_result'],
+      );
+
+      const updateResult = await service.run(
+        `UPDATE x402_purchase_requests SET status = ?, action_id = ?, decision = ?, reasons = ?, transaction_hash = ?, response = ?, error = ?, updated_at = ? WHERE id = ?`,
+        [
+          'PAID',
+          'act_test_result',
+          'ALLOW',
+          '[]',
+          '0xdeadbeef',
+          '{"temperatureC":22}',
+          null,
+          new Date().toISOString(),
+          'pr_test_result',
+        ],
+      );
+      expect(updateResult.changes).toBe(1);
+
+      const paid = await service.getOne('SELECT * FROM x402_purchase_requests WHERE id = ?', ['pr_test_result']);
+      expect(paid.status).toBe('PAID');
+      expect(paid.transaction_hash).toBe('0xdeadbeef');
+      expect(JSON.parse(paid.response)).toEqual({ temperatureC: 22 });
+    });
+  });
 });

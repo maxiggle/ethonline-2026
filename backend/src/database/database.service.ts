@@ -9,6 +9,7 @@ import {
   HumanBindingRow,
   X402PaymentReceiptRow,
   X402EscalationRow,
+  X402PurchaseRequestRow,
 } from './database.interface';
 
 interface InMemoryState {
@@ -20,6 +21,7 @@ interface InMemoryState {
   humanBindings: Map<string, HumanBindingRow>;
   x402PaymentReceipts: Map<string, X402PaymentReceiptRow>;
   x402Escalations: Map<string, X402EscalationRow>;
+  x402PurchaseRequests: Map<string, X402PurchaseRequestRow>;
 }
 
 @Injectable()
@@ -39,6 +41,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     humanBindings: new Map(),
     x402PaymentReceipts: new Map(),
     x402Escalations: new Map(),
+    x402PurchaseRequests: new Map(),
   };
 
   constructor() {}
@@ -171,6 +174,26 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
       );
 
       ALTER TABLE x402_escalations ADD COLUMN IF NOT EXISTS reasons TEXT NOT NULL DEFAULT '[]';
+
+      CREATE TABLE IF NOT EXISTS x402_purchase_requests (
+        id VARCHAR(128) PRIMARY KEY,
+        user_id VARCHAR(128) NOT NULL,
+        agent_address VARCHAR(64) NOT NULL,
+        service_name VARCHAR(256) NOT NULL,
+        resource_url TEXT NOT NULL,
+        query_params TEXT NOT NULL DEFAULT '{}',
+        justification TEXT NOT NULL,
+        amount VARCHAR(64) NOT NULL,
+        status VARCHAR(32) NOT NULL,
+        action_id VARCHAR(128),
+        decision VARCHAR(16),
+        reasons TEXT NOT NULL DEFAULT '[]',
+        transaction_hash VARCHAR(128),
+        response TEXT,
+        error TEXT,
+        created_at TIMESTAMPTZ NOT NULL,
+        updated_at TIMESTAMPTZ NOT NULL
+      );
 
       CREATE TABLE IF NOT EXISTS "user" (
         id VARCHAR(128) PRIMARY KEY,
@@ -306,6 +329,17 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
           updated_at: new Date(row.updated_at).toISOString(),
         });
       }
+
+      const purchaseRequestsRes = await this.pgPool.query<X402PurchaseRequestRow>(
+        'SELECT * FROM x402_purchase_requests',
+      );
+      for (const row of purchaseRequestsRes.rows) {
+        this.state.x402PurchaseRequests.set(row.id, {
+          ...row,
+          created_at: new Date(row.created_at).toISOString(),
+          updated_at: new Date(row.updated_at).toISOString(),
+        });
+      }
     } catch (err: any) {
       this.logger.error(`Error loading state from PostgreSQL: ${err.message}`);
     }
@@ -342,6 +376,9 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
       if (data.x402Escalations) {
         this.state.x402Escalations = new Map(Object.entries(data.x402Escalations));
       }
+      if (data.x402PurchaseRequests) {
+        this.state.x402PurchaseRequests = new Map(Object.entries(data.x402PurchaseRequests));
+      }
     } catch (err: any) {
       this.logger.error(`Error reading persistence file: ${err.message}`);
     }
@@ -364,6 +401,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
         humanBindings: Object.fromEntries(this.state.humanBindings),
         x402PaymentReceipts: Object.fromEntries(this.state.x402PaymentReceipts),
         x402Escalations: Object.fromEntries(this.state.x402Escalations),
+        x402PurchaseRequests: Object.fromEntries(this.state.x402PurchaseRequests),
       };
       fs.writeFileSync(this.filePath, JSON.stringify(data, null, 2), 'utf-8');
     } catch (err: any) {
@@ -487,6 +525,30 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
         return item ? ([item] as unknown as T[]) : [];
       }
       return Array.from(this.state.x402Escalations.values()) as unknown as T[];
+    }
+
+    if (s.includes('FROM X402_PURCHASE_REQUESTS')) {
+      if (s.includes('WHERE ID =')) {
+        const item = this.state.x402PurchaseRequests.get(String(params[0]));
+        return item ? ([item] as unknown as T[]) : [];
+      }
+      if (s.includes('WHERE USER_ID =')) {
+        const userId = params[0];
+        const requests = Array.from(this.state.x402PurchaseRequests.values()).filter(
+          (r) => r.user_id === userId,
+        );
+        requests.sort((a, b) => (a.created_at < b.created_at ? 1 : a.created_at > b.created_at ? -1 : 0));
+        return requests.slice(0, 50) as unknown as T[];
+      }
+      if (s.includes('WHERE AGENT_ADDRESS =')) {
+        const agentAddress = String(params[0]).toLowerCase();
+        const requests = Array.from(this.state.x402PurchaseRequests.values()).filter(
+          (r) => r.agent_address.toLowerCase() === agentAddress,
+        );
+        requests.sort((a, b) => (a.created_at > b.created_at ? 1 : a.created_at < b.created_at ? -1 : 0));
+        return requests as unknown as T[];
+      }
+      return Array.from(this.state.x402PurchaseRequests.values()) as unknown as T[];
     }
 
     if (s.includes('FROM "USER"') || s.includes('FROM USER ') || s.includes('FROM USERS')) {
@@ -689,6 +751,89 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
       if (existing) {
         existing.status = status;
         existing.signature = signature || null;
+        existing.updated_at = String(updated_at);
+        this.saveToFile();
+        this.asyncWriteToPostgres(sql, params);
+        return { changes: 1 };
+      }
+      return { changes: 0 };
+    }
+
+    // 6b. x402 Purchase Requests
+    if (s.includes('INTO X402_PURCHASE_REQUESTS')) {
+      const [
+        id, user_id, agent_address, service_name, resource_url, query_params, justification,
+        amount, status, action_id, decision, reasons, transaction_hash, response, error,
+        created_at, updated_at,
+      ] = params;
+      const row: X402PurchaseRequestRow = {
+        id,
+        user_id,
+        agent_address,
+        service_name,
+        resource_url,
+        query_params: String(query_params),
+        justification,
+        amount: String(amount),
+        status,
+        action_id: action_id || null,
+        decision: decision || null,
+        reasons: String(reasons),
+        transaction_hash: transaction_hash || null,
+        response: response || null,
+        error: error || null,
+        created_at: String(created_at),
+        updated_at: String(updated_at),
+      };
+      this.state.x402PurchaseRequests.set(id, row);
+      this.saveToFile();
+      this.asyncWriteToPostgres(sql, params);
+      return { changes: 1 };
+    }
+
+    if (s.startsWith('UPDATE X402_PURCHASE_REQUESTS')) {
+      // Atomic claim transition: only applies while the row is still QUEUED.
+      if (s.includes("STATUS = 'QUEUED'")) {
+        const [status, updated_at, id] = params;
+        const existing = this.state.x402PurchaseRequests.get(id);
+        if (existing && existing.status === 'QUEUED') {
+          existing.status = status;
+          existing.updated_at = String(updated_at);
+          this.saveToFile();
+          this.asyncWriteToPostgres(sql, params);
+          return { changes: 1 };
+        }
+        return { changes: 0 };
+      }
+
+      // Result update: carries transaction_hash, response and error.
+      if (s.includes('TRANSACTION_HASH')) {
+        const [status, action_id, decision, reasons, transaction_hash, response, error, updated_at, id] = params;
+        const existing = this.state.x402PurchaseRequests.get(id);
+        if (existing) {
+          existing.status = status;
+          existing.action_id = action_id || null;
+          existing.decision = decision || null;
+          existing.reasons = String(reasons);
+          existing.transaction_hash = transaction_hash || null;
+          existing.response = response || null;
+          existing.error = error || null;
+          existing.updated_at = String(updated_at);
+          this.saveToFile();
+          this.asyncWriteToPostgres(sql, params);
+          return { changes: 1 };
+        }
+        return { changes: 0 };
+      }
+
+      // Progress update: moves PROCESSING -> AUTHORIZED with the Guardian decision.
+      const [status, action_id, decision, reasons, updated_at, id] = params;
+      const existing = this.state.x402PurchaseRequests.get(id);
+      if (existing) {
+        existing.status = status;
+        existing.action_id = action_id || null;
+        existing.decision = decision || null;
+        existing.reasons = String(reasons);
         existing.updated_at = String(updated_at);
         this.saveToFile();
         this.asyncWriteToPostgres(sql, params);

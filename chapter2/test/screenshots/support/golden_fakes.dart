@@ -2,6 +2,9 @@ import 'dart:typed_data';
 
 import 'package:chapter2/features/auth/models/agent_model.dart';
 import 'package:chapter2/features/mandate/models/treasury_mandate.dart';
+import 'package:chapter2/features/services/models/bazaar_service.dart';
+import 'package:chapter2/features/services/models/purchase_request.dart';
+import 'package:chapter2/features/services/remote/services_api_service.dart';
 import 'package:chapter2/features/timeline/models/treasury_action.dart';
 import 'package:chapter2/features/x402_approvals/eip712/eip712_typed_data.dart';
 import 'package:chapter2/features/x402_approvals/ledger/ledger_ble_client.dart';
@@ -251,3 +254,153 @@ const goldenLedgerDevice = LedgerDevice(
   connectionType: ConnectionType.ble,
   deviceInfo: LedgerDeviceType.nanoX,
 );
+
+// Services tab fixtures, shaped like the live `GET /discovery/resources`
+// catalog (see TICKET-MOBILE-003).
+
+const kFixtureWeatherService = BazaarService(
+  resourceUrl: 'https://chapter2-backend.onrender.com/x402/weather',
+  serviceName: 'Open-Meteo Weather Oracle',
+  description: 'Real-time weather telemetry from Open-Meteo for a given city',
+  tags: ['weather', 'climate', 'oracle', 'open-meteo'],
+  method: 'GET',
+  queryParams: {'city': 'Lagos'},
+  outputExample: {
+    'city': 'Lagos',
+    'temperatureC': 29.4,
+    'humidity': 77,
+    'windSpeedKph': 11.2,
+    'source': 'open-meteo.com',
+  },
+  priceAtomicUnits: '10000',
+  payTo: '0xD11dBAA787f8a51F22EC72c4d9D497F6a127e76f',
+  network: 'eip155:84532',
+);
+
+const kFixtureChainReportService = BazaarService(
+  resourceUrl: 'https://chapter2-backend.onrender.com/x402/chain-report',
+  serviceName: 'Base Sepolia Chain Report',
+  description: 'Live Base Sepolia chain report: latest block, fee data and USDC supply',
+  tags: ['chain', 'base-sepolia', 'rpc', 'usdc'],
+  method: 'GET',
+  queryParams: {},
+  outputExample: {
+    'network': 'eip155:84532',
+    'blockNumber': 12345678,
+  },
+  priceAtomicUnits: '2000000',
+  payTo: '0xD11dBAA787f8a51F22EC72c4d9D497F6a127e76f',
+  network: 'eip155:84532',
+);
+
+const kFixturePartnerFeedService = BazaarService(
+  resourceUrl: 'https://chapter2-backend.onrender.com/x402/partner-feed',
+  serviceName: 'Partner Chain Feed',
+  description: 'Partner chain data feed (demo: unapproved payee, expected to BLOCK)',
+  tags: ['chain', 'base-sepolia', 'partner'],
+  method: 'GET',
+  queryParams: {},
+  outputExample: {
+    'network': 'eip155:84532',
+    'blockNumber': 12345678,
+  },
+  priceAtomicUnits: '50000',
+  payTo: '0xbB3a82Db5D91c3B7a24DB7A493316302444D7cEf',
+  network: 'eip155:84532',
+);
+
+List<BazaarService> buildFixtureCatalog() => const [
+      kFixtureWeatherService,
+      kFixtureChainReportService,
+      kFixturePartnerFeedService,
+    ];
+
+PurchaseRequest buildFixturePurchaseRequestPaid() {
+  final now = DateTime.now().toUtc();
+  return PurchaseRequest.fromJson({
+    'id': 'pr_paid_1',
+    'agentAddress': kFixtureAgentAddress,
+    'serviceName': kFixtureWeatherService.serviceName,
+    'resourceUrl': kFixtureWeatherService.resourceUrl,
+    'queryParams': {'city': 'Lagos'},
+    'justification': 'Purchase Open-Meteo Weather Oracle for company use',
+    'amount': kFixtureWeatherService.priceAtomicUnits,
+    'status': 'PAID',
+    'actionId': 'act_paid_1',
+    'decision': 'ALLOW',
+    'reasons': <String>[],
+    'transactionHash': '0x4f7c9e2b1a6d3f8e0c5b2a9d7e4f1c8b6a3d0e9f2c5b8a1d4e7f0c3b6a9d2e5f',
+    'response': {
+      'city': 'Lagos',
+      'temperatureC': 29.4,
+      'humidity': 77,
+      'windSpeedKph': 11.2,
+      'source': 'open-meteo.com',
+    },
+    'error': null,
+    'createdAt': now.subtract(const Duration(minutes: 2)).toIso8601String(),
+    'updatedAt': now.toIso8601String(),
+  });
+}
+
+PurchaseRequest buildFixturePurchaseRequestEscalated() {
+  final now = DateTime.now().toUtc();
+  return PurchaseRequest.fromJson({
+    'id': 'pr_escalated_1',
+    'agentAddress': kFixtureAgentAddress,
+    'serviceName': kFixtureChainReportService.serviceName,
+    'resourceUrl': kFixtureChainReportService.resourceUrl,
+    'queryParams': <String, String>{},
+    'justification': 'Purchase Base Sepolia Chain Report for company use',
+    'amount': kFixtureChainReportService.priceAtomicUnits,
+    'status': 'AUTHORIZED',
+    'actionId': 'act_escalated_1',
+    'decision': 'ESCALATE',
+    'reasons': ['Exceeds per-payment autonomous limit'],
+    'transactionHash': null,
+    'response': null,
+    'error': null,
+    'createdAt': now.subtract(const Duration(minutes: 1)).toIso8601String(),
+    'updatedAt': now.toIso8601String(),
+  });
+}
+
+/// A [ServicesApiService] fake for goldens and widget tests: returns fixture
+/// data instead of calling the network.
+class GoldenServicesApiService extends ServicesApiService {
+  GoldenServicesApiService({
+    List<BazaarService>? catalog,
+    List<PurchaseRequest>? purchases,
+    PurchaseRequest? purchaseRequestById,
+  })  : catalog = catalog ?? buildFixtureCatalog(),
+        purchases = purchases ?? const [],
+        _purchaseRequestById = purchaseRequestById,
+        super(apiClient: null);
+
+  final List<BazaarService> catalog;
+  final List<PurchaseRequest> purchases;
+  final PurchaseRequest? _purchaseRequestById;
+
+  @override
+  Future<List<BazaarService>> fetchCatalog() async => catalog;
+
+  @override
+  Future<List<PurchaseRequest>> fetchPurchaseRequests() async => purchases;
+
+  @override
+  Future<PurchaseRequest> fetchPurchaseRequest(String id) async {
+    final request = _purchaseRequestById;
+    if (request == null) throw StateError('No fixture purchase request configured for goldens');
+    return request;
+  }
+
+  @override
+  Future<PurchaseRequest> createPurchaseRequest({
+    required String agentAddress,
+    required String resourceUrl,
+    required Map<String, String> queryParams,
+    required String justification,
+  }) async {
+    throw UnimplementedError('Not exercised by screenshot goldens');
+  }
+}

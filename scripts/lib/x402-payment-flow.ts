@@ -236,15 +236,7 @@ export async function payX402Resource(deps: PayResourceDeps): Promise<PayResourc
     deps.onWaitingForApproval?.();
   }
 
-  const paymentClient = new x402Client(
-    (_version, requirements) =>
-      requirements.find(
-        (candidate) =>
-          candidate.network === paymentRequirements.network &&
-          candidate.asset.toLowerCase() === paymentRequirements.asset.toLowerCase(),
-      ) ?? requirements[0],
-  );
-  registerExactEvmScheme(paymentClient, { signer: outcome.signer, networks: [deps.network as `${string}:${string}`] });
+  const paymentClient = createGuardianCappedPaymentClient(paymentRequirements, outcome.signer, deps.network);
   const paymentHttpClient = new x402HTTPClient(paymentClient);
 
   const paymentPayload = await paymentHttpClient.createPaymentPayload(paymentRequired);
@@ -278,4 +270,37 @@ export async function payX402Resource(deps: PayResourceDeps): Promise<PayResourc
     transactionHash: settleResponse.transaction,
     data,
   };
+}
+
+/**
+ * Builds the x402 client that signs one Guardian-authorized payment.
+ *
+ * The SDK's default spend control caps every payment at $1, which would reject escalated payments
+ * before the Ledger is asked to sign. The Guardian has already authorized this exact requirement, so
+ * the SDK cap is pinned to that requirement's asset and atomic amount: anything larger is still refused.
+ */
+export function createGuardianCappedPaymentClient(
+  paymentRequirements: PaymentRequirements,
+  signer: EvmClientSignerLike,
+  network: string,
+): x402Client {
+  const paymentClient = new x402Client(
+    (_version, requirements) =>
+      requirements.find(
+        (candidate) =>
+          candidate.network === paymentRequirements.network &&
+          candidate.asset.toLowerCase() === paymentRequirements.asset.toLowerCase(),
+      ) ?? requirements[0],
+  );
+  paymentClient.setSpendControls({
+    allowedAssets: [
+      {
+        network: paymentRequirements.network,
+        asset: paymentRequirements.asset,
+        maxAmountPerPayment: paymentRequirements.amount,
+      },
+    ],
+  });
+  registerExactEvmScheme(paymentClient, { signer, networks: [network as `${string}:${string}`] });
+  return paymentClient;
 }

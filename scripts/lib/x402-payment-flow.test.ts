@@ -1,11 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { encodePaymentRequiredHeader } from '@x402/core/http';
+import { encodePaymentRequiredHeader, x402HTTPClient } from '@x402/core/http';
 import type { PaymentRequired, PaymentRequirements } from '@x402/core/types';
 
 import type { AgentRequestSigner } from './agent-request.js';
 import {
   authorizeAndResolvePaymentSigner,
+  createGuardianCappedPaymentClient,
   payX402Resource,
   type EvmClientSignerLike,
   type PaymentSigningOutcome,
@@ -175,5 +176,48 @@ describe('payX402Resource onAuthorized hook', () => {
     expect(createLedgerSigner).not.toHaveBeenCalled();
     expect(agentEvmSigner.signTypedData).not.toHaveBeenCalled();
     expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('createGuardianCappedPaymentClient', () => {
+  const escalatedRequirements: PaymentRequirements = {
+    ...paymentRequirements,
+    amount: '2000000',
+    extra: { name: 'USDC', version: '2' },
+  };
+
+  function paymentRequiredFor(accepted: PaymentRequirements): PaymentRequired {
+    return {
+      x402Version: 2,
+      resource: { url: `${BASE_URL}/x402/chain-report` },
+      accepts: [accepted],
+    };
+  }
+
+  it('lets a Guardian-authorized payment above the SDK default $1 cap reach the signer', async () => {
+    const ledgerSigner: EvmClientSignerLike = {
+      address: '0x6666666666666666666666666666666666666666',
+      signTypedData: vi.fn().mockResolvedValue(`0x${'ab'.repeat(65)}`),
+    };
+    const client = createGuardianCappedPaymentClient(escalatedRequirements, ledgerSigner, 'eip155:84532');
+
+    await new x402HTTPClient(client).createPaymentPayload(paymentRequiredFor(escalatedRequirements));
+
+    expect(ledgerSigner.signTypedData).toHaveBeenCalledTimes(1);
+  });
+
+  it('still refuses a requirement above the Guardian-authorized amount without signing', async () => {
+    const ledgerSigner: EvmClientSignerLike = {
+      address: '0x6666666666666666666666666666666666666666',
+      signTypedData: vi.fn().mockResolvedValue(`0x${'ab'.repeat(65)}`),
+    };
+    const client = createGuardianCappedPaymentClient(escalatedRequirements, ledgerSigner, 'eip155:84532');
+
+    await expect(
+      new x402HTTPClient(client).createPaymentPayload(
+        paymentRequiredFor({ ...escalatedRequirements, amount: '2000001' }),
+      ),
+    ).rejects.toThrow(/spendControls/);
+    expect(ledgerSigner.signTypedData).not.toHaveBeenCalled();
   });
 });

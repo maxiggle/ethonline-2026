@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:developer';
 import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart';
@@ -47,7 +48,11 @@ class PrivyManager {
     }
 
     final p = privy;
-    await p.getAuthState();
+    final existingState = await p.getAuthState();
+    if (existingState is Authenticated) {
+      // A leftover session (for example from a deleted account) breaks the OAuth sheet, so clear it first.
+      await logout();
+    }
 
     final result = await p.oAuth.login(
       provider: OAuthProvider.google,
@@ -59,6 +64,11 @@ class PrivyManager {
         return await _extractAuthResult(user);
 
       case Failure<PrivyUser>(error: final error):
+        if (error.message.contains('WebAuthenticationSession')) {
+          throw Exception(
+            'Sign-in was canceled before it finished. Tap Sign In again and choose Continue when iOS asks to use privy.io.',
+          );
+        }
         throw Exception("Google Sign-In failed: ${error.message}");
     }
   }
@@ -82,7 +92,7 @@ class PrivyManager {
   Future<void> logout() async {
     if (!isNativeSupported) return;
     try {
-      await privy.logout();
+      await privy.logout().timeout(const Duration(seconds: 5));
     } catch (e) {
       log('Error during Privy logout: $e');
     }

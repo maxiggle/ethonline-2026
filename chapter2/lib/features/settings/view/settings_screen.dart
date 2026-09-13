@@ -150,10 +150,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 const SizedBox(height: 16),
                 ElevatedButton.icon(
                   onPressed: () async {
+                    final router = context.router;
                     await context.read<AuthCubit>().logout();
-                    if (context.mounted) {
-                      context.router.replaceAll([LoginRoute()]);
-                    }
+                    router.replaceAll([LoginRoute()]);
                   },
                   icon: const Icon(Icons.logout_rounded, size: 18),
                   label: const Text('Sign out'),
@@ -230,20 +229,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     if (confirmed != true || !context.mounted) return;
 
+    final router = context.router;
+    final messenger = ScaffoldMessenger.of(context);
     try {
       await context.read<AuthCubit>().deleteAccount();
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Account deleted successfully')),
-        );
-        context.router.replaceAll([LoginRoute()]);
-      }
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Account deleted successfully')),
+      );
+      router.replaceAll([LoginRoute()]);
     } catch (e) {
-      if (context.mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to delete account: $e')),
-        );
-      }
+      messenger.showSnackBar(
+        SnackBar(content: Text('Failed to delete account: $e')),
+      );
     }
   }
 

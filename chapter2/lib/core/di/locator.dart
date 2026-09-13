@@ -2,8 +2,6 @@ import 'package:agent_security/agent_security.dart';
 import 'package:chapter2/core/config/app_config.dart';
 import 'package:chapter2/core/network/api_client.dart';
 import 'package:chapter2/features/auth/services/auth_service.dart';
-import 'package:chapter2/features/services/remote/services_api_service.dart';
-import 'package:chapter2/features/shell/shell_tab_controller.dart';
 import 'package:chapter2/features/x402_approvals/remote/x402_approvals_api_service.dart';
 import 'package:chapter2/features/x402_approvals/ledger/ledger_ble_client.dart';
 import 'package:chapter2/services/api/chapter2_api_service.dart';
@@ -57,16 +55,6 @@ void setupServiceLocator({String? backendBaseUrl}) {
     locator.registerLazySingleton<X402ApprovalsApiService>(
       () => X402ApprovalsApiService(apiClient: locator<ApiClient>()),
     );
-  }
-
-  if (!locator.isRegistered<ServicesApiService>()) {
-    locator.registerLazySingleton<ServicesApiService>(
-      () => ServicesApiService(apiClient: locator<ApiClient>()),
-    );
-  }
-
-  if (!locator.isRegistered<ShellTabController>()) {
-    locator.registerLazySingleton<ShellTabController>(() => ShellTabController());
   }
 
   if (!locator.isRegistered<LedgerInterface>()) {

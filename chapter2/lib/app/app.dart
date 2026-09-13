@@ -2,8 +2,6 @@ import 'package:chapter2/core/di/locator.dart';
 import 'package:chapter2/features/auth/cubit/auth_cubit.dart';
 import 'package:chapter2/features/auth/services/auth_service.dart';
 import 'package:chapter2/features/dashboard/cubit/dashboard_cubit.dart';
-import 'package:chapter2/features/services/cubit/services_cubit.dart';
-import 'package:chapter2/features/services/remote/services_api_service.dart';
 import 'package:chapter2/features/x402_approvals/cubit/x402_approvals_cubit.dart';
 import 'package:chapter2/features/x402_approvals/remote/x402_approvals_api_service.dart';
 import 'package:chapter2/features/x402_approvals/ledger/ledger_ble_client.dart';
@@ -43,9 +41,6 @@ class Chapter2App extends StatelessWidget {
               apiService: locator<X402ApprovalsApiService>(),
               ledgerBleClient: locator<LedgerBleClient>(),
             ),
-          ),
-          BlocProvider<ServicesCubit>(
-            create: (ctx) => ServicesCubit(apiService: locator<ServicesApiService>()),
           ),
         ],
         child: MaterialApp.router(

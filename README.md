@@ -152,6 +152,28 @@ npm --prefix scripts run demo:x402 -- --scenario=allow
 
 `AGENT_KEY_SOURCE` has no default; the client refuses to start without it.
 
+### Buy a service from the app
+
+Instead of the demo client picking a scenario, the app can queue a purchase request for the agent worker to pay:
+
+```bash
+curl -X POST http://localhost:3001/x402/purchase-requests \
+  -H "Authorization: Bearer $PRIVY_TOKEN" -H 'Content-Type: application/json' \
+  -d '{"agentAddress":"<agent address>","resourceUrl":"https://chapter2-backend.onrender.com/x402/weather","queryParams":{"city":"Lagos"},"justification":"Brief the morning report."}'
+```
+
+Run the worker with the same environment as the demo client (`API_BASE_URL`, `AGENT_KEY_SOURCE` and its per-source variables):
+
+```bash
+WALLET_PASS=$(security find-generic-password -a default -s ledger-wallet-cli -w) \
+AGENT_KEY_SOURCE=ledger-key-ring AGENT_KEY_RING_FILE=~/.chapter2/agent-key.enc \
+AGENT_KEY_RING_KEY_NAME=chapter2-x402-agent \
+API_BASE_URL=http://localhost:3001 \
+npm --prefix scripts run agent:worker
+```
+
+It polls `POST /x402/purchase-requests/claim` every 5 seconds, pays the oldest queued request through the same Guardian-gated flow (ALLOW / ESCALATE / BLOCK), reports the Guardian's decision as soon as it authorizes the payment, then reports `PAID`, `BLOCKED`, `REJECTED`, `EXPIRED` or `FAILED`. `Ctrl-C` finishes the request in flight before exiting. Poll `GET /x402/purchase-requests/:id` from the app to watch it move from `QUEUED` through to a terminal state.
+
 ## Security model and known limitations
 
 - **What's enforced:**

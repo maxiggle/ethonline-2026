@@ -1,11 +1,11 @@
-# TICKET PAY-001: Rotate Leaked Keys & Redeploy Chapter2Guard / Safe
+# TICKET PAY-001: Replace the Development Wallet & Redeploy Chapter2Guard / Safe
 
 **Component:** `contracts/`, `backend/`, ops · **Priority:** Critical / blocking · **Read first:** `docs/tickets/README.md`
 
 > **Human-owned steps are marked 👤.** An agent must not generate, handle or paste private keys, fund wallets, move funds, or broadcast deployments on its own. It prepares the code and config, then hands those steps to the user.
 
 ## Problem
-1. **The key is public.** The relayer private key (address `0x988B225185b516DEF12A7Ec841abae9072ef4EE8`) was committed to the public GitHub repo in commit `03e4dbb`. That address is:
+1. **One development wallet holds every role.** The original deployment used a single development wallet (`0x988B225185b516DEF12A7Ec841abae9072ef4EE8`) as:
    - the MockSafe `owner`
    - the Chapter2Guard `owner`
    - the Chapter2Guard `humanSigner`
@@ -37,9 +37,8 @@ Choose the execution identity model and record it in the ticket PR:
 2. Generate new keys for owner, humanSigner (ideally a Ledger) and relayer/autonomousAgent. Fund the relayer with Base Sepolia ETH.
 3. Run the deploy script and verify the contracts on Blockscout.
 4. Update Render secrets and the local `.env`.
-5. Optional: scrub the leaked key from git history (`git filter-repo`, then force-push). Rotation is required either way.
 
 ## Acceptance criteria
-- **Distinct roles:** the new Guard has distinct `owner`, `humanSigner` and `autonomousAgent`, none of them the leaked address.
+- **Distinct roles:** the new Guard has distinct `owner`, `humanSigner` and `autonomousAgent`, none of them the old development wallet.
 - **Enforced checks:** a relayed autonomous transfer above `maxAutonomousAmount` reverts on-chain.
 - **Startup check:** the backend refuses to start when the on-chain roles don't match its relayer.

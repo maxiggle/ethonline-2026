@@ -8,7 +8,7 @@ wallet (LEDGER-001); ESCALATE is signed on the human's Ledger through the web ap
 lanes build against — implemented exactly as specified so they can be built in parallel.
 
 This rail **never** calls `OnChainExecutorService.executeAutonomousPayment` /
-`executeEscalatedPayment` (the relayer key is leaked); it only ever uses the read-only
+`executeEscalatedPayment`, because the backend never broadcasts transactions; it only ever uses the read-only
 `verifyTokenTransfer` to confirm a settlement actually happened on-chain.
 
 ## 2. How It Was Built

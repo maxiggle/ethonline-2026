@@ -29,7 +29,7 @@ DX feedback is judged as much as the code.
      3. `npm --prefix scripts run demo:x402`
    - **Security model and known limitations** (be honest):
      - The legacy Safe/Chapter2Guard execution path and `/vendor/*` rail aren't used by the x402 demo.
-     - The deployed Guard's owner/humanSigner key was exposed and must be rotated (PAY-001).
+     - The deployed Guard's owner and humanSigner are a development wallet and must be replaced by a redeploy (PAY-001).
      - Replay protection for the legacy rail is single-instance.
      - The Flutter app shows x402 actions in its timeline but doesn't yet sign.
 2. **`docs/features/x402-ledger-agent-payments.md`** (repo feature-doc format: Overview, How It Was Built, Data Flow & Interfaces, Trade-offs / Edge Cases). Cover the API contract from X402-002, the agent request signature scheme, the spending policy, and the escalation typed-data checks.
@@ -53,7 +53,7 @@ DX feedback is judged as much as the code.
    7. timeline in the backend/mobile app;
    8. closing.
 5. **👤 Human pre-submission checklist** (put it in `docs/demo-script.md`):
-   - The leaked relayer `0x988B…` holds no funds, and Render secrets are rotated.
+   - The old development wallet `0x988B…` holds no funds, and Render secrets are rotated.
    - `git grep -nIE "PRIVATE_KEY *= *['\"]?0x[0-9a-fA-F]{64}"` returns nothing in the current tree.
    - The demo runs end-to-end twice in a row.
    - The branch is merged/pushed per your git workflow, and the repo is public.

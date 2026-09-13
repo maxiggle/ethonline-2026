@@ -34,8 +34,7 @@ before these handlers ever run.
 | `GET /x402/partner-feed` | $0.05 | `X402_PARTNER_PAY_TO_ADDRESS` | Same chain data as chain-report; exists to demo BLOCK in X402-002, since this payee isn't on the approved list |
 
 Weather returns `400` for a missing `city`, `404` when Open-Meteo's geocoder finds nothing, and `502`
-for any upstream failure. `chain-report`/`partner-feed` never call `OnChainExecutorService` (its
-relayer key is leaked) — they only read from the RPC.
+for any upstream failure. `chain-report`/`partner-feed` never call `OnChainExecutorService`; they only read from the RPC.
 
 ### Discovery (`VendorService.getBazaarCatalog()`)
 Rebuilt from `X402_CONFIG` to list exactly these three resources, in v2 `accepts` shape

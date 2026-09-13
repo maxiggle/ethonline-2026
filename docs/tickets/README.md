@@ -48,9 +48,21 @@ The API contract between X402-002, LEDGER-002 and X402-003 is fixed in X402-002.
 
 Every backend variable above is **required**: fail at startup with a clear error if one is missing. No fallbacks.
 
+### World ID Orb gate (WORLD-001 + MOBILE-004)
+
+| Variable | Where | Value / meaning |
+|---|---|---|
+| `REQUIRE_WORLD_ID_FOR_ESCALATIONS` | backend | `true` or `false`, no default. When `true`, Ledger approvals need an active World ID Orb binding for `LEDGER_APPROVER_ADDRESS` |
+| `WORLD_ID_APP_ID` / `WORLD_ID_RP_ID` | backend | `app_…` / `rp_…` from the World Developer Portal |
+| `WORLD_ID_SIGNING_KEY` | backend | RP signing key from the Developer Portal (secret, set only in Render) |
+| `WORLD_ID_ACTION` | backend | e.g. `chapter2-ledger-approver` |
+| `WORLD_ID_ENVIRONMENT` | backend | `staging` (simulator) or `production` (World App) |
+
+Set all five `WORLD_ID_*` variables, or none. A partial set, or `REQUIRE_WORLD_ID_FOR_ESCALATIONS=true` without them, is a startup error.
+
 ### Out of scope tonight
 - **Deferred tickets:** the legacy Safe/Chapter2Guard execution path (`/actions` → relayer → MockSafe) and `/vendor/*` tx-hash endpoints stay as they are. PAY-001 … PAY-005, SEC-005, CLEAN-001 and DOCS-001 are deferred until after submission.
-- **The x402 rail must never call `OnChainExecutorService` execution methods**, because the relayer key is leaked. `verifyTokenTransfer` is read-only and fine to use.
+- **The x402 rail must never call `OnChainExecutorService` execution methods**, because the backend must never broadcast transactions. `verifyTokenTransfer` is read-only and fine to use.
 - **Mobile Flutter app changes:** none are required. Actions created by the x402 rail still show up in the existing activity timeline because they are stored as `TreasuryAction`s.
 
 ---
@@ -70,11 +82,12 @@ Every backend variable above is **required**: fail at startup with a clear error
 | [MOBILE-003: Services tab](TICKET-MOBILE-003-SERVICES-TAB.md) | ✅ Done and verified |
 | [SUBMIT-001: docs, DX feedback, demo](TICKET-SUBMIT-001-DOCS-AND-DEMO.md) | ✅ Docs, partner pages and DX feedback done; video pending |
 | [SEC-004: legacy x402 tx verification](TICKET-SEC-004-X402-PAYMENT-VERIFICATION.md) | ✅ Done (legacy `/vendor/*` rail) |
-| [PAY-001: leaked key rotation](TICKET-PAY-001-KEY-ROTATION-REDEPLOY.md) | ✅ Relayer key removed from the backend (executor is read-only). 👤 Sweep the leaked relayer's funds and delete the keys from Render |
+| [PAY-001: replace the development wallet](TICKET-PAY-001-KEY-ROTATION-REDEPLOY.md) | ✅ Relayer key removed from the backend (executor is read-only). 👤 Move funds off the old development wallet and the retired MockSafe, and delete the keys from Render |
 | [PAY-002](TICKET-PAY-002-TOKEN-AND-MANDATE-CONFIG.md) … [PAY-005](TICKET-PAY-005-MOBILE-SIGNING-AND-API.md), [SEC-005](TICKET-SEC-005-USER-SCOPING-AND-WEBSOCKET-AUTH.md), [CLEAN-001](TICKET-CLEAN-001-ZERO-FALLBACK-AND-HYGIENE.md), [DOCS-001](TICKET-DOCS-001-DOCUMENTATION-REFRESH.md) | Deferred / superseded by the x402 architecture |
+| [WORLD-001: Orb-verified Ledger approver (backend)](TICKET-WORLD-001-ORB-VERIFIED-LEDGER-APPROVER.md) | 🚧 In progress. Replaces the Selfie Check plan with World ID Orb (staging + simulator) |
+| [MOBILE-004: World ID Orb step in the app](TICKET-MOBILE-004-WORLD-ID-ORB-APPROVER.md) | 🚧 In progress, in parallel with WORLD-001 against its API contract |
 
 **Designed, not built:**
-- the World ID approval gate ([world-id-approval-gate.md](../world-id-approval-gate.md)), pending World Selfie Check access;
 - a signed agent-binding challenge.
 
 Current architecture: [ARCHITECTURE.md](../ARCHITECTURE.md). Branch `feature/backend-security-hardening` is merged into `main`.

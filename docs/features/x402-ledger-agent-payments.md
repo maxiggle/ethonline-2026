@@ -94,7 +94,7 @@ For ALLOW, the escalation, console and polling steps are skipped and the agent s
 
 ## 4. Trade-offs / Edge Cases
 - **Authorization window.** The x402 client sets `validBefore = now + maxTimeoutSeconds`. The escalated `chain-report` route advertises 900 s. An approval after expiry is refused, because the facilitator couldn't settle it; the agent must request again.
-- **No relayer.** The rail never calls `OnChainExecutorService` execution methods (that key is exposed), only the read-only `verifyTokenTransfer`. The facilitator pays gas, so neither the agent nor the Ledger address needs ETH.
+- **No relayer.** The rail never calls `OnChainExecutorService` execution methods, only the read-only `verifyTokenTransfer`. The facilitator pays gas, so neither the agent nor the Ledger address needs ETH.
 - **Single-instance state.** The agent-signature replay cache and the escalation reasons held between `authorize` and `escalation` are per process. That's fine for one backend instance, not for horizontal scaling.
 - **No cross-action settlement replay guard.** A transaction hash is verified against one action's token, payee and minimum amount, but isn't marked as consumed across actions.
 - **Public console reads.** `/x402/approvals/pending` exposes pending payment details without a session. Every state change requires a Ledger signature, so the endpoint grants no authority.

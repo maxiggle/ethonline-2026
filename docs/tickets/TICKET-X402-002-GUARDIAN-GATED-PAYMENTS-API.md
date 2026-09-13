@@ -10,7 +10,7 @@ Before the agent signs any x402 payment, Chapter 2 must decide **ALLOW / ESCALAT
 
 This API is the contract used by LEDGER-002 and X402-003. **Implement it exactly as specified.**
 
-⚠️ This rail must **never** call `OnChainExecutorService.executeAutonomousPayment` / `executeEscalatedPayment`, because the relayer key is leaked. `verifyTokenTransfer` (read-only) is allowed.
+⚠️ This rail must **never** call `OnChainExecutorService.executeAutonomousPayment` / `executeEscalatedPayment`, because the backend must never broadcast transactions. `verifyTokenTransfer` (read-only) is allowed.
 
 ## Existing code to reuse
 - **Actions:** `ActionStoreService.createAction(dto)`, `getAction(id)`, `updateStatus(id, status, { txHash, signature })`. Store every x402 payment as a `TreasuryAction` so it shows in the existing timeline, with `justification` prefixed `x402: `.

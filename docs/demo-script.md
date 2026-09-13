@@ -68,7 +68,7 @@ The agent's key is protected by the **Ledger Key Ring**.
 
 ## Pre-submission checklist
 
-- [ ] **Leaked relayer funds:** swept from `0x988B225185b516DEF12A7Ec841abae9072ef4EE8`.
+- [ ] **Old development wallet:** funds moved off `0x988B…4EE8` and out of the retired MockSafe `0x4f71…1df6`.
 - [ ] **Render environment:** `RELAYER_PRIVATE_KEY` and `DEPLOYER_PRIVATE_KEY` are deleted.
 - [ ] **No committed keys:** `git grep -nIE "PRIVATE_KEY *= *['\"]?0x[0-9a-fA-F]{64}"` finds nothing in the current tree.
 - [ ] **Demo rehearsal:** scenes 4–6 run end-to-end twice in a row with the Ledger-backed agent.

@@ -78,8 +78,6 @@ The Flutter mobile application abstracts the backend host inside `AppConfig`:
    - PostgreSQL: `chapter2-postgres`
    - Web Service: `chapter2-backend`
 6. Enter the required private secrets marked `sync: false`:
-   - `RELAYER_PRIVATE_KEY`: Private key funded on Base Sepolia.
-   - `DEPLOYER_PRIVATE_KEY`: Deployer private key.
    - `PRIVY_APP_SECRET`: Privy application secret.
 7. Click **Apply**. Render provisions the database and deploys the backend.
 

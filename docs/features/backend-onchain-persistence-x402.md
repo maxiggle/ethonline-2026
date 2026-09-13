@@ -37,7 +37,7 @@ Ticket `CH2-CORE-001` transitions Chapter 2 from an ephemeral in-memory simulati
 
 ### C. Zero-Fallback Security Policy
 * All sensitive credentials and network parameters must be supplied via `process.env`.
-* Missing `RPC_URL`, `SAFE_ADDRESS`, `GUARD_ADDRESS`, `RELAYER_PRIVATE_KEY`, or `CHAIN_ID` causes the service to throw an immediate exception during startup.
+* Missing `RPC_URL`, `SAFE_ADDRESS`, `GUARD_ADDRESS`, or `CHAIN_ID` causes the service to throw an immediate exception during startup.
 * No dummy private keys or addresses are hardcoded in code.
 
 ### D. x402 Payment Protocol (`backend/src/vendor/`)

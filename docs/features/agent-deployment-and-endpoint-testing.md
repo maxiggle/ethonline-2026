@@ -322,6 +322,8 @@ curl -X POST http://localhost:3001/agents/bind \
   }'
 ```
 Backend relayer (`0x988B225185b516DEF12A7Ec841abae9072ef4EE8`) immediately broadcasts a transaction to the live `Chapter2Guard` contract on Base Sepolia:
+
+> Removed: the backend no longer holds a relayer key, so this broadcast no longer happens. `OnChainExecutorService` is read-only.
 ```solidity
 // Guard contract receives the user's Privy embedded wallet
 Chapter2Guard(0x9b6023D1B6D3b076C8d999Ba406AE486750ce7d3).setAutonomousAgent(PRIVY_WALLET_ADDRESS);

@@ -70,7 +70,7 @@ npm --prefix scripts run demo:x402 -- --scenario=allow
 
 ## 👤 Human pre-submission checklist
 
-- [ ] The leaked relayer `0x988B225185b516DEF12A7Ec841abae9072ef4EE8` holds no funds, and Render secrets are rotated (PAY-001).
+- [ ] The leaked relayer `0x988B225185b516DEF12A7Ec841abae9072ef4EE8` holds no funds, and `RELAYER_PRIVATE_KEY` / `DEPLOYER_PRIVATE_KEY` are deleted from the Render environment (PAY-001).
 - [ ] `git grep -nIE "PRIVATE_KEY *= *['\"]?0x[0-9a-fA-F]{64}"` returns nothing in the current tree.
 - [ ] The demo runs end-to-end twice in a row (`--scenario=all`), with fresh USDC balances on both the agent and the Ledger address.
 - [ ] The branch is merged/pushed per your git workflow, and the repo is public.

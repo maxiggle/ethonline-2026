@@ -184,7 +184,7 @@ It polls `POST /x402/purchase-requests/claim` every 5 seconds, pays the oldest q
   - Escalation typed data is checked against the Guardian's record (payer = Ledger, payee, amount, token, chain, expiry). The approval must recover to the Ledger address.
   - Settlement is confirmed by reading the USDC `Transfer` log on-chain.
 - **Human verification with World ID is designed but not enforced yet.** Escalated approvals currently require only the Ledger signature. The World ID Selfie Check verification service is built and tested, but World hasn't approved Selfie Check for this app, and enforcing it now would block every approval. Design and rollout plan: [`docs/world-id-approval-gate.md`](docs/world-id-approval-gate.md).
-- **The legacy Safe / `Chapter2Guard` execution path and the `/vendor/*` rail aren't used by the x402 demo.** The deployed Guard's owner / `humanSigner` key was exposed and must be rotated before that path is used again (PAY-001).
+- **The backend holds no relayer key.** `OnChainExecutorService` only reads Base Sepolia (settlement verification, contract state, balances), so the legacy Safe / `Chapter2Guard` execution path is disabled: `/actions` approvals are recorded but never broadcast. The deployed Guard's owner / `humanSigner` key was exposed earlier; it stays in git history and must never hold funds (PAY-001).
 - **Single-instance state:**
   - The agent-signature replay cache, the legacy `/vendor/*` receipt replay protection, and the escalation reasons awaiting typed data are all held per backend instance.
   - Settlement verification has no cross-action replay guard.

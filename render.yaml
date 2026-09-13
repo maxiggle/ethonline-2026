@@ -51,6 +51,18 @@ services:
         value: "5000000"
       - key: LEDGER_APPROVER_ADDRESS
         sync: false
+      - key: REQUIRE_WORLD_ID_FOR_ESCALATIONS
+        sync: false
+      - key: WORLD_ID_APP_ID
+        sync: false
+      - key: WORLD_ID_RP_ID
+        sync: false
+      - key: WORLD_ID_SIGNING_KEY
+        sync: false
+      - key: WORLD_ID_ACTION
+        sync: false
+      - key: WORLD_ID_ENVIRONMENT
+        sync: false
 
 databases:
   - name: chapter2-postgres

@@ -6,7 +6,7 @@ An autonomous agent pays for real x402 v2 resources with Base Sepolia USDC. The 
 | Decision | Who signs the EIP-3009 `TransferWithAuthorization` | Paid from |
 |---|---|---|
 | ALLOW | The agent wallet. Its key is decrypted from the **Ledger Key Ring** (`wallet-cli ring`) into memory only | Agent address |
-| ESCALATE | The human, **on their Ledger** (Nano X / Flex), through the WebHID approval console | `LEDGER_APPROVER_ADDRESS` |
+| ESCALATE | The human, **on their Ledger** (Nano X / Flex), through the mobile app over Bluetooth or the WebHID approval console | `LEDGER_APPROVER_ADDRESS` |
 | BLOCK | Nobody | n/a |
 
 The public x402 facilitator settles every payment. The backend then confirms the USDC `Transfer` on-chain before marking the `TreasuryAction` `EXECUTED`.

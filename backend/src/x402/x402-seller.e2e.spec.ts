@@ -33,6 +33,8 @@ describe('x402 v2 seller (unpaid challenge)', () => {
   let baseUrl: string;
 
   beforeAll(async () => {
+    process.env.REQUIRE_WORLD_ID_FOR_ESCALATIONS = 'false';
+
     const moduleRef: TestingModule = await Test.createTestingModule({
       imports: [X402Module],
     }).compile();

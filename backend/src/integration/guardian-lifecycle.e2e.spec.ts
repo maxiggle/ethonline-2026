@@ -50,6 +50,7 @@ describe('Guardian Lifecycle & Tri-Verdict E2E Integration Suite', () => {
     process.env.SAFE_ADDRESS = '0x4f712dd78Cb1a504C69CB4f68B82Fddb6b3b1df6';
     process.env.GUARD_ADDRESS = '0x9b6023D1B6D3b076C8d999Ba406AE486750ce7d3';
     process.env.CHAIN_ID = '84532';
+    process.env.REQUIRE_WORLD_ID_FOR_ESCALATIONS = 'false';
 
     mockSocketServer = {
       emit: jest.fn(),

@@ -8,6 +8,7 @@ import 'package:chapter2/shared/theme/app_text_styles.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class WorldIdApproverCard extends StatelessWidget {
   const WorldIdApproverCard({
@@ -228,9 +229,34 @@ class WorldIdApproverCard extends StatelessWidget {
               const SizedBox(width: 8),
               Expanded(
                 child: ElevatedButton.icon(
-                  onPressed: () {
+                  onPressed: () async {
                     if (onOpenLink != null) {
-                      onOpenLink!(context, url);
+                      await onOpenLink!(context, url);
+                      return;
+                    }
+                    try {
+                      final uri = Uri.parse(url);
+                      final launched = await launchUrl(
+                        uri,
+                        mode: LaunchMode.externalApplication,
+                      );
+                      if (!launched && context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Could not open link. Please use Copy link.'),
+                            behavior: SnackBarBehavior.floating,
+                          ),
+                        );
+                      }
+                    } catch (_) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Could not open link. Please use Copy link.'),
+                            behavior: SnackBarBehavior.floating,
+                          ),
+                        );
+                      }
                     }
                   },
                   icon: const Icon(Icons.open_in_new_rounded, size: 16),

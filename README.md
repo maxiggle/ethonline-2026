@@ -65,7 +65,7 @@ cast wallet new --json | jq -r '.[0].private_key' | \
   wallet-cli ring encrypt -o ~/.chapter2/agent-key.enc --key chapter2-x402-agent
 npm --prefix scripts install
 WALLET_PASS=$(security find-generic-password -a default -s ledger-wallet-cli -w) \
-AGENT_KEY_RING_FILE=~/.chapter2/agent-key.enc AGENT_KEY_RING_KEY_NAME=chapter2-x402-agent \
+AGENT_KEY_SOURCE=ledger-key-ring AGENT_KEY_RING_FILE=~/.chapter2/agent-key.enc AGENT_KEY_RING_KEY_NAME=chapter2-x402-agent \
 npm --prefix scripts run agent:address
 ```
 
@@ -118,7 +118,7 @@ Open it in Chrome or Edge and click **Connect Ledger**. Keep the device unlocked
 
 ```bash
 WALLET_PASS=$(security find-generic-password -a default -s ledger-wallet-cli -w) \
-AGENT_KEY_RING_FILE=~/.chapter2/agent-key.enc \
+AGENT_KEY_SOURCE=ledger-key-ring AGENT_KEY_RING_FILE=~/.chapter2/agent-key.enc \
 AGENT_KEY_RING_KEY_NAME=chapter2-x402-agent \
 API_BASE_URL=http://localhost:3001 \
 npm --prefix scripts run demo:x402
@@ -130,6 +130,27 @@ Pass `-- --scenario=allow|escalate|block` to run a single scenario:
 - **block:** a partner feed with an unapproved payee; no signature is made.
 
 Demo video plan and pre-submission checklist: [`docs/demo-script.md`](docs/demo-script.md).
+
+### Test the payment rail without a Ledger
+
+The Key Ring needs the Ledger plugged in for `ring init`. To test a real x402 payment on a machine without the device, load a test agent key from a password-encrypted Foundry keystore instead. This only replaces how the agent's key is loaded: escalated payments still need the Ledger approver, and the demo itself uses `AGENT_KEY_SOURCE=ledger-key-ring`.
+
+```bash
+security add-generic-password -a default -s chapter2-test-agent -w
+cast wallet new ~/.foundry/keystores chapter2-test-agent
+```
+
+The first command stores a password in the Keychain. `cast wallet new` prompts for that same password and prints the test agent's address. Fund that address with Base Sepolia USDC and bind it as in step 3.
+
+```bash
+AGENT_KEY_SOURCE=foundry-keystore \
+AGENT_KEYSTORE_FILE=~/.foundry/keystores/chapter2-test-agent \
+AGENT_KEYSTORE_PASSWORD=$(security find-generic-password -a default -s chapter2-test-agent -w) \
+API_BASE_URL=https://chapter2-backend.onrender.com \
+npm --prefix scripts run demo:x402 -- --scenario=allow
+```
+
+`AGENT_KEY_SOURCE` has no default; the client refuses to start without it.
 
 ## Security model and known limitations
 

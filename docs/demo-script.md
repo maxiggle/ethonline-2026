@@ -38,7 +38,7 @@ wallet-cli ring keys
 **Run:**
 ```bash
 WALLET_PASS=$(security find-generic-password -a default -s ledger-wallet-cli -w) \
-AGENT_KEY_RING_FILE=~/.chapter2/agent-key.enc \
+AGENT_KEY_SOURCE=ledger-key-ring AGENT_KEY_RING_FILE=~/.chapter2/agent-key.enc \
 AGENT_KEY_RING_KEY_NAME=chapter2-x402-agent \
 API_BASE_URL=http://localhost:3001 \
 npm --prefix scripts run demo:x402 -- --scenario=allow

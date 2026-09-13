@@ -34,7 +34,7 @@ class X402ApprovalsState extends Equatable {
   final String? errorMessage;
   final String? lastCompletedActionId;
 
-  bool get isLedgerReady => status != X402ApprovalsStatus.idle && connectedAddress != null && matchesApprover;
+  bool get isLedgerReady => connectedAddress != null && matchesApprover;
 
   X402ApprovalsState copyWith({
     X402ApprovalsStatus? status,

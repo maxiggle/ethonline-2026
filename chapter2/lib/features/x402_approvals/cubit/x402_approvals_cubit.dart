@@ -191,6 +191,37 @@ class X402ApprovalsCubit extends Cubit<X402ApprovalsState> {
     }
   }
 
+  Future<String> signPersonalMessageOnLedger(String message) async {
+    final signer = _signer;
+    if (signer == null || !state.isLedgerReady) {
+      throw StateError('Connect the approver Ledger first');
+    }
+
+    emit(state.copyWith(
+      status: X402ApprovalsStatus.awaitingDevice,
+      awaitingMessage: 'Confirm the World ID binding on your Ledger',
+      clearErrorMessage: true,
+    ));
+
+    try {
+      final bytes = Uint8List.fromList(utf8.encode(message));
+      final signature = await signer.signPersonalMessage(bytes);
+      emit(state.copyWith(
+        status: X402ApprovalsStatus.idle,
+        awaitingMessage: null,
+      ));
+      return signature.toHex();
+    } catch (error) {
+      final described = _describeError(error);
+      emit(state.copyWith(
+        status: X402ApprovalsStatus.failure,
+        errorMessage: described,
+        awaitingMessage: null,
+      ));
+      throw Exception(described);
+    }
+  }
+
   PendingX402Approval? _findPendingApproval(String actionId) {
     for (final approval in state.pendingApprovals) {
       if (approval.actionId == actionId) return approval;

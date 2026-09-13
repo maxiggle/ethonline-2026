@@ -262,5 +262,68 @@ void main() {
 
       await cubit.close();
     });
+
+    test('signPersonalMessageOnLedger() throws StateError when Ledger is not ready', () async {
+      final api = _FakeX402ApprovalsApiService();
+      final signer = _FakeLedgerEthereumSigner(address: _approverAddress);
+      final cubit = X402ApprovalsCubit(apiService: api, ledgerBleClient: _FakeLedgerBleClient(signer));
+
+      await expectLater(
+        () => cubit.signPersonalMessageOnLedger('test message'),
+        throwsA(isA<StateError>().having((e) => e.message, 'message', 'Connect the approver Ledger first')),
+      );
+
+      await cubit.close();
+    });
+
+    test('signPersonalMessageOnLedger() signs UTF-8 bytes when ready, restores idle, and returns hex signature', () async {
+      final api = _FakeX402ApprovalsApiService();
+      final signer = _FakeLedgerEthereumSigner(address: _approverAddress)
+        ..personalMessageSignature = LedgerSignature(
+          v: 27,
+          r: Uint8List.fromList(List.filled(32, 0x05)),
+          s: Uint8List.fromList(List.filled(32, 0x06)),
+        );
+      final cubit = X402ApprovalsCubit(apiService: api, ledgerBleClient: _FakeLedgerBleClient(signer));
+
+      await cubit.loadConfig();
+      await cubit.connectLedger(_testDevice);
+
+      final signature = await cubit.signPersonalMessageOnLedger('chapter2-world-bind:0xnullifier');
+
+      expect(signer.lastPersonalMessage, isNotNull);
+      expect(String.fromCharCodes(signer.lastPersonalMessage!), 'chapter2-world-bind:0xnullifier');
+      expect(
+        signature,
+        '0x'
+        '${'05' * 32}'
+        '${'06' * 32}'
+        '1b',
+      );
+      expect(cubit.state.status, X402ApprovalsStatus.idle);
+      expect(cubit.state.isLedgerReady, isTrue);
+
+      await cubit.close();
+    });
+
+    test('signPersonalMessageOnLedger() maps Ledger status word error to failure state and throws', () async {
+      final api = _FakeX402ApprovalsApiService();
+      final signer = _FakeLedgerEthereumSigner(address: _approverAddress)
+        ..signingError = const LedgerStatusWordException(statusWord: 0x6985, message: 'Rejected on the Ledger');
+      final cubit = X402ApprovalsCubit(apiService: api, ledgerBleClient: _FakeLedgerBleClient(signer));
+
+      await cubit.loadConfig();
+      await cubit.connectLedger(_testDevice);
+
+      await expectLater(
+        () => cubit.signPersonalMessageOnLedger('msg'),
+        throwsA(isA<Exception>().having((e) => e.toString(), 'toString', contains('Rejected on the Ledger'))),
+      );
+
+      expect(cubit.state.status, X402ApprovalsStatus.failure);
+      expect(cubit.state.errorMessage, 'Rejected on the Ledger');
+
+      await cubit.close();
+    });
   });
 }

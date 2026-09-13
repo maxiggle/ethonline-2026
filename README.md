@@ -157,10 +157,12 @@ npm --prefix scripts run demo:x402 -- --scenario=allow
 Instead of the demo client picking a scenario, the app can queue a purchase request for the agent worker to pay:
 
 ```bash
-curl -X POST http://localhost:3001/x402/purchase-requests \
+curl -X POST https://chapter2-backend.onrender.com/x402/purchase-requests \
   -H "Authorization: Bearer $PRIVY_TOKEN" -H 'Content-Type: application/json' \
   -d '{"agentAddress":"<agent address>","resourceUrl":"https://chapter2-backend.onrender.com/x402/weather","queryParams":{"city":"Lagos"},"justification":"Brief the morning report."}'
 ```
+
+`resourceUrl` must be a `resource` from the same backend's `GET /discovery/resources`; the worker only pays resources on its own `API_BASE_URL`. In the app, the Services tab creates these requests for you.
 
 Run the worker with the same environment as the demo client (`API_BASE_URL`, `AGENT_KEY_SOURCE` and its per-source variables):
 
@@ -168,7 +170,7 @@ Run the worker with the same environment as the demo client (`API_BASE_URL`, `AG
 WALLET_PASS=$(security find-generic-password -a default -s ledger-wallet-cli -w) \
 AGENT_KEY_SOURCE=ledger-key-ring AGENT_KEY_RING_FILE=~/.chapter2/agent-key.enc \
 AGENT_KEY_RING_KEY_NAME=chapter2-x402-agent \
-API_BASE_URL=http://localhost:3001 \
+API_BASE_URL=https://chapter2-backend.onrender.com \
 npm --prefix scripts run agent:worker
 ```
 

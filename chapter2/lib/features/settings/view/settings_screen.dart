@@ -4,8 +4,8 @@ import 'package:chapter2/core/di/locator.dart';
 import 'package:chapter2/features/auth/cubit/auth_cubit.dart';
 import 'package:chapter2/features/auth/cubit/auth_state.dart';
 import 'package:chapter2/router/app_router.dart';
-import 'package:chapter2/services/api/chapter2_api_service.dart';
-import 'package:chapter2/services/api/models/world_id_status.dart';
+import 'package:chapter2/features/world_id/remote/models/world_id_approver_status.dart';
+import 'package:chapter2/features/world_id/remote/world_id_api_service.dart';
 import 'package:chapter2/features/x402_approvals/cubit/x402_approvals_cubit.dart';
 import 'package:chapter2/features/x402_approvals/cubit/x402_approvals_state.dart';
 import 'package:chapter2/shared/theme/chapter2_theme.dart';
@@ -25,7 +25,7 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   _WorldIdLoadStatus _worldIdStatus = _WorldIdLoadStatus.loading;
-  WorldIdStatus? _worldId;
+  WorldIdApproverStatus? _approverStatus;
 
   @override
   void initState() {
@@ -37,16 +37,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _loadWorldIdStatus() async {
-    final walletAddress = context.read<AuthCubit>().state.user?.walletAddress;
-    if (walletAddress == null || walletAddress.isEmpty) {
-      setState(() => _worldIdStatus = _WorldIdLoadStatus.unavailable);
-      return;
-    }
     try {
-      final status = await locator<Chapter2ApiService>().fetchWorldIdStatus(walletAddress);
+      final status = await locator<WorldIdApiService>().fetchApproverStatus();
       if (!mounted) return;
       setState(() {
-        _worldId = status;
+        _approverStatus = status;
         _worldIdStatus = _WorldIdLoadStatus.loaded;
       });
     } catch (_) {
@@ -174,16 +169,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
         return Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text('Status', style: AppTextStyles.sm(context, color: AppColors.textSecondary)),
+            Text('Ledger approver World ID', style: AppTextStyles.sm(context, color: AppColors.textSecondary)),
             Text('Not configured', style: AppTextStyles.sm(context, fontWeight: AppTextStyles.semiBold)),
           ],
         );
       case _WorldIdLoadStatus.loaded:
-        final isVerified = _worldId?.isVerified ?? false;
+        final status = _approverStatus;
+        final isConfigured = status?.isWorldIdConfigured ?? false;
+        final isVerified = status?.isVerified ?? false;
+
+        if (!isConfigured) {
+          return Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('Ledger approver World ID', style: AppTextStyles.sm(context, color: AppColors.textSecondary)),
+              Text('Not configured', style: AppTextStyles.sm(context, fontWeight: AppTextStyles.semiBold)),
+            ],
+          );
+        }
+
         return Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text('Status', style: AppTextStyles.sm(context, color: AppColors.textSecondary)),
+            Text('Ledger approver World ID', style: AppTextStyles.sm(context, color: AppColors.textSecondary)),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
               decoration: BoxDecoration(
@@ -192,7 +200,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 border: Border.all(color: isVerified ? AppColors.allowBorder : AppColors.border),
               ),
               child: Text(
-                isVerified ? 'Verified' : 'Not verified',
+                isVerified ? 'Orb verified' : 'Not verified',
                 style: AppTextStyles.xs(
                   context,
                   color: isVerified ? AppColors.allowText : AppColors.textSecondary,

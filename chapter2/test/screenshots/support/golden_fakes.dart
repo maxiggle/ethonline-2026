@@ -16,7 +16,6 @@ import 'package:chapter2/features/x402_approvals/remote/models/pending_x402_appr
 import 'package:chapter2/features/x402_approvals/remote/models/x402_approval_config.dart';
 import 'package:chapter2/features/x402_approvals/remote/x402_approvals_api_service.dart';
 import 'package:chapter2/services/api/chapter2_api_service.dart';
-import 'package:chapter2/services/api/models/world_id_status.dart';
 import 'package:ledger_flutter_plus/ledger_flutter_plus.dart';
 
 /// Fixture data and fakes for screenshot goldens. Fake data here is fine —
@@ -153,12 +152,10 @@ class GoldenChapter2ApiService extends Chapter2ApiService {
   GoldenChapter2ApiService({
     this.actions = const [],
     this.mandate,
-    this.worldIdVerified = false,
   });
 
   final List<TreasuryAction> actions;
   final TreasuryMandate? mandate;
-  final bool worldIdVerified;
 
   @override
   Future<List<TreasuryAction>> fetchActions({TreasuryActionStatus? status}) async => actions;
@@ -175,11 +172,6 @@ class GoldenChapter2ApiService extends Chapter2ApiService {
           safeAddress: kFixtureSafeAddress,
           guardAddress: kFixtureGuardAddress,
         );
-  }
-
-  @override
-  Future<WorldIdStatus> fetchWorldIdStatus(String walletAddress) async {
-    return WorldIdStatus(signerAddress: walletAddress, isVerified: worldIdVerified);
   }
 }
 

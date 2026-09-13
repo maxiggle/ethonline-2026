@@ -5,6 +5,7 @@ import 'package:chapter2/features/auth/cubit/auth_state.dart';
 import 'package:chapter2/features/auth/models/user_identity.dart';
 import 'package:chapter2/features/auth/services/auth_service.dart';
 import 'package:chapter2/features/settings/view/settings_screen.dart';
+import 'package:chapter2/features/world_id/remote/world_id_api_service.dart';
 import 'package:chapter2/features/x402_approvals/cubit/x402_approvals_cubit.dart';
 import 'package:chapter2/services/api/chapter2_api_service.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -20,7 +21,10 @@ void main() {
   setUp(() async {
     await locator.reset();
     locator.registerLazySingleton<Chapter2ApiService>(
-      () => GoldenChapter2ApiService(worldIdVerified: true),
+      () => GoldenChapter2ApiService(),
+    );
+    locator.registerLazySingleton<WorldIdApiService>(
+      () => GoldenWorldIdApiService(),
     );
   });
 

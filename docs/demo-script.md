@@ -1,77 +1,80 @@
 # Chapter 2 Demo Video Script (under 4 minutes)
 
-The demo shows an autonomous agent paying for real x402 v2 resources on Base Sepolia. The Chapter 2 Guardian decides **ALLOW / ESCALATE / BLOCK** before any signature exists. The Ledger protects both sides: the agent's key is locked in `wallet-cli ring`, and escalated payments are signed on the device.
+The story: a company's AI agent buys services on its own, and the **Guardian** decides every payment:
+- a small one is paid by the agent;
+- a big one waits for a human's **Ledger**;
+- an unapproved one is blocked.
+
+The agent's key is protected by the **Ledger Key Ring**.
 
 ## Before recording
 
-Have these open and ready:
-
 | Window | State |
 |---|---|
-| Terminal 1 | Backend running (`cd backend && npm run start:dev`), logs visible |
-| Chrome | Approval console (`cd approval-console && npm run dev`), Ledger connected, address matches the approver banner |
-| Terminal 2 | In repo root, `WALLET_PASS` **not** exported in shell history (use the inline `$(security …)` form) |
-| Ledger Flex / Nano X | Unlocked, Ethereum app open, in camera view |
-| Browser tab | `https://base-sepolia.blockscout.com` |
+| **Phone** | Chapter 2 app, signed in, agent bound and **ACTIVE**, screen recording on |
+| **Terminal** | Agent worker running with `AGENT_KEY_SOURCE=ledger-key-ring` (see [development.md](development.md)), text large enough to read |
+| **Ledger Nano X / Flex** | Unlocked, Ethereum app open, **Blind signing** on, in camera view |
+| **Browser tab** | `https://base-sepolia.blockscout.com` |
 
-Do a full dry run first; every settlement costs real testnet USDC from the agent and the Ledger address.
+**Setup checks:**
+- The Render backend is live, and `LEDGER_APPROVER_ADDRESS` is the Ledger in the video.
+- The agent and the Ledger address both hold Base Sepolia USDC.
+- `ring init` and the agent key setup were done on the machine that runs the worker, with the Ledger connected.
+- Do a full dry run first. Every paid step moves real testnet USDC.
 
 ## Scenes
 
-### 1. Problem (0:00–0:10)
+### 1. Problem (0:00–0:15)
 **Show:** title card.
-**Say:** "AI agents can now pay for APIs on their own with x402. The question isn't whether they can pay, it's who decides whether they should, and where the keys live."
+**Say:** "AI agents can now pay for APIs by themselves. For a company, the question isn't whether an agent can pay, it's who decides whether it should, and who holds the keys."
 
-### 2. Architecture (0:10–0:30)
-**Show:** the Mermaid diagram from the root `README.md`.
-**Say:** "Every payment request goes to the Chapter 2 Guardian before anything is signed. Small, approved payments are signed by the agent's wallet, whose key is encrypted by the Ledger Key Ring. Payments over the limit are signed on my Ledger. Unapproved payees are blocked outright. Settlement goes through the public x402 facilitator, and the backend verifies the USDC transfer on-chain."
+### 2. How it works (0:15–0:35)
+**Show:** the layer diagram from the [README](../README.md).
+**Say:** "Chapter 2 has two layers. The agent layer is an AI agent whose wallet key is locked by the Ledger Key Ring. The management layer is our app and the Guardian: every payment is checked before it's signed. Small ones are allowed, big ones go to my Ledger, unapproved ones are blocked."
 
-### 3. Ledger Key Ring protects the agent key (0:30–0:55)
-**Run:**
-```bash
-wallet-cli ring keys
-```
-**Show:** the `chapter2-x402-agent` key listed, and `~/.chapter2/agent-key.enc` being ciphertext (`head -c 64 ~/.chapter2/agent-key.enc | xxd`). **Never** show a decrypted key.
-**Say:** "The agent's private key only exists encrypted under a key ring provisioned with my Ledger. The agent decrypts it in memory at startup; it is never on disk in plaintext."
+### 3. The agent's key is protected by Ledger (0:35–0:55)
+**Show:** the terminal with `wallet-cli ring keys` listing `chapter2-x402-agent`, then the worker starting and printing the agent address with `key source: ledger-key-ring`. **Never** show a decrypted key.
+**Say:** "The agent's private key only exists encrypted under a Key Ring set up with my Ledger. The agent decrypts it in memory when it starts. It's never on disk and never sent to our servers."
 
-### 4. ALLOW: autonomous payment (0:55–1:35)
-**Run:**
-```bash
-WALLET_PASS=$(security find-generic-password -a default -s ledger-wallet-cli -w) \
-AGENT_KEY_SOURCE=ledger-key-ring AGENT_KEY_RING_FILE=~/.chapter2/agent-key.enc \
-AGENT_KEY_RING_KEY_NAME=chapter2-x402-agent \
-API_BASE_URL=http://localhost:3001 \
-npm --prefix scripts run demo:x402 -- --scenario=allow
-```
-**Show:** the 402 challenge, the `$0.01` price, Guardian decision `ALLOW`, the settlement hash, the real Lagos weather, then click the Blockscout link: the USDC transfer is **from the agent address**.
-**Say:** "One cent, approved payee, under the limit: the Guardian allows it and the agent pays by itself."
-
-### 5. ESCALATE: human approves on the Ledger (1:35–2:40)
-**Run:** the same command with `--scenario=escalate`.
+### 4. Browse services and buy one: ALLOW (0:55–1:40)
 **Show:**
-1. Terminal: `$2.00` chain report, Guardian decision `ESCALATE` with the policy reason (over the autonomous limit), "Waiting for approval on Ledger console…".
-2. Console: the pending card with resource, amount, payee, risk score, reasons and expiry.
-3. Click **Approve**; film the Ledger screen showing the `TransferWithAuthorization` fields; confirm on the device.
-4. Terminal: settlement hash and real chain data. Blockscout: the transfer is **from the Ledger address**.
+1. App **Services** tab: the catalog; type "weather" to filter it.
+2. Open **Open-Meteo Weather Oracle** ($0.01), set a city, and tap **Ask agent to pay**.
+3. Purchase detail moves through Queued, Processing, Authorized, **Paid**, while the worker terminal logs each step.
+4. The weather data appears in the app. Copy the transaction link, open it in Blockscout, and show the USDC transfer **from the agent address**.
 
-**Say:** "Two dollars is over what I let the agent spend alone. Nothing gets signed until I approve it on my Ledger. The backend only accepts a signature that recovers to my Ledger address."
+**Say:** "One cent to an approved service, under the agent's limit. The Guardian allows it and the agent pays by itself, with real USDC, verified on-chain."
 
-### 6. BLOCK (2:40–3:05)
-**Run:** the same command with `--scenario=block`.
-**Show:** Guardian decision `BLOCK`, the reason (payee not on the approved list), and that no signature or transaction was produced.
-**Say:** "An unapproved payee is never paid, not even with human approval: no signature is ever created."
+### 5. A big purchase needs my Ledger: ESCALATE (1:40–2:45)
+**Show:**
+1. Services: **Base Sepolia Chain Report** ($2.00), then **Ask agent to pay**.
+2. Purchase detail shows **Needs your Ledger approval** with the Guardian's reason. Tap **Open Approvals**.
+3. Approvals tab: **Connect Ledger** over Bluetooth, and the address matches the approver. Tap **Approve**.
+4. Film the Ledger screen and confirm on the device.
+5. Back in the purchase detail: **Paid**. Blockscout shows the transfer **from the Ledger address**.
 
-### 7. Timeline (3:05–3:30)
-**Show:** the backend logs or the mobile app activity timeline listing the three `TreasuryAction`s: `EXECUTED` (allow), `EXECUTED` (escalate), `REJECTED` (block).
-**Say:** "Every decision is recorded as a treasury action, whichever path it took."
+**Say:** "Two dollars is over what I let the agent spend alone. Nothing moves until I approve it on my Ledger, and our backend only accepts a signature from that exact device."
+
+### 6. An unapproved service is blocked: BLOCK (2:45–3:10)
+**Show:** Services: **Partner Chain Feed**, then **Ask agent to pay**. The purchase ends **Blocked**, with the reason "payee not on the approved list". The worker logs BLOCKED.
+**Say:** "An unapproved payee is never paid. No signature is ever created."
+
+### 7. Everything is on record (3:10–3:30)
+**Show:** the Activity tab with the three actions: allowed, escalated then executed, blocked.
+**Say:** "Every decision the Guardian made is recorded, whichever path it took."
 
 ### 8. Closing (3:30–3:50)
 **Say:** "Chapter 2: agents move fast, the Guardian decides, and the Ledger holds the keys to everything that matters."
 
-## 👤 Human pre-submission checklist
+## Pre-submission checklist
 
-- [ ] The leaked relayer `0x988B225185b516DEF12A7Ec841abae9072ef4EE8` holds no funds, and `RELAYER_PRIVATE_KEY` / `DEPLOYER_PRIVATE_KEY` are deleted from the Render environment (PAY-001).
-- [ ] `git grep -nIE "PRIVATE_KEY *= *['\"]?0x[0-9a-fA-F]{64}"` returns nothing in the current tree.
-- [ ] The demo runs end-to-end twice in a row (`--scenario=all`), with fresh USDC balances on both the agent and the Ledger address.
-- [ ] The branch is merged/pushed per your git workflow, and the repo is public.
-- [ ] The video is uploaded and linked in the submission form.
+- [ ] **Leaked relayer funds:** swept from `0x988B225185b516DEF12A7Ec841abae9072ef4EE8`.
+- [ ] **Render environment:** `RELAYER_PRIVATE_KEY` and `DEPLOYER_PRIVATE_KEY` are deleted.
+- [ ] **No committed keys:** `git grep -nIE "PRIVATE_KEY *= *['\"]?0x[0-9a-fA-F]{64}"` finds nothing in the current tree.
+- [ ] **Demo rehearsal:** scenes 4–6 run end-to-end twice in a row with the Ledger-backed agent.
+- [ ] **Partner links submitted:**
+  - [docs/partners/ledger](partners/ledger)
+  - [docs/partners/privy](partners/privy)
+  - [docs/partners/world](partners/world)
+- [ ] **Video:** uploaded and linked in the submission form.
+- [x] **Repository:** public.

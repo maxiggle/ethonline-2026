@@ -6,6 +6,7 @@
   "scripts": {
     "agent:address": "tsx agent-address.ts",
     "demo:x402": "tsx agent-x402-client.ts",
+    "agent:worker": "tsx agent-worker.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },

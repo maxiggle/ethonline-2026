@@ -173,10 +173,6 @@ export class ActionsController {
 
     const approvedAction = { ...action };
 
-    if (this.onChainExecutor) {
-      this.onChainExecutor.executeAutonomousPayment(action).catch(() => {});
-    }
-
     return { action: approvedAction, decision };
   }
 
@@ -300,10 +296,6 @@ export class ActionsController {
       executionPayload: { approval: approvalParams, signature: dto.signature },
       safeTxData: encodedPayload,
     });
-
-    if (this.onChainExecutor) {
-      this.onChainExecutor.executeEscalatedPayment(action, dto.signature).catch(() => {});
-    }
 
     return {
       action,

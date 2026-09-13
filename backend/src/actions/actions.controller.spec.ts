@@ -30,8 +30,6 @@ describe('ActionsController', () => {
   let mockServer: Partial<Server>;
   let onChainExecutor: {
     getGuardHumanSigner: jest.Mock;
-    executeAutonomousPayment: jest.Mock;
-    executeEscalatedPayment: jest.Mock;
   };
 
   const validRecipient = '0x0000000000000000000000000000000000041c4e';
@@ -65,8 +63,6 @@ describe('ActionsController', () => {
     agentsService.assertAgentOwnership.mockReset();
     onChainExecutor = {
       getGuardHumanSigner: jest.fn(),
-      executeAutonomousPayment: jest.fn().mockResolvedValue(undefined),
-      executeEscalatedPayment: jest.fn().mockResolvedValue(undefined),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -285,10 +281,6 @@ describe('ActionsController', () => {
         'action:approved',
         expect.anything(),
       );
-      expect(onChainExecutor.executeEscalatedPayment).toHaveBeenCalledWith(
-        expect.objectContaining({ id: proposed.action.id }),
-        signResult.signature,
-      );
     });
 
     it('should reject approval with invalid signature', async () => {
@@ -341,7 +333,6 @@ describe('ActionsController', () => {
       ).rejects.toThrow(ForbiddenException);
 
       expect(controller.getAction(proposed.action.id).status).toBe(TreasuryActionStatus.PENDING);
-      expect(onChainExecutor.executeEscalatedPayment).not.toHaveBeenCalled();
     });
 
     it('should refuse approvals from a World ID verified operator who is not the Guard humanSigner', async () => {

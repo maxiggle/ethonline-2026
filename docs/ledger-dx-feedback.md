@@ -1,6 +1,6 @@
 # Ledger Developer Experience Feedback
 
-Friction we actually hit while building Chapter 2's agent payment flow with `wallet-cli ring` (Ledger Key Ring) and the Device Management Kit (DMK) over WebHID.
+Friction we actually hit while building Chapter 2's agent payment flow with `wallet-cli ring` (Ledger Key Ring), the Device Management Kit (DMK) over WebHID, and Ledger Bluetooth signing in the Flutter app.
 
 **Versions:**
 
@@ -10,6 +10,7 @@ Friction we actually hit while building Chapter 2's agent payment flow with `wal
 | `@ledgerhq/device-management-kit` | 1.9.0 |
 | `@ledgerhq/device-signer-kit-ethereum` | 1.18.0 |
 | `@ledgerhq/device-transport-kit-web-hid` | 1.2.4 |
+| `ledger_flutter_plus` (Flutter, Android) | 1.6.0+1 |
 
 Each item gives the problem, its impact and a suggested fix. Nothing here is hypothetical: every item comes from our code or from CLI output we captured.
 
@@ -93,3 +94,35 @@ Each item gives the problem, its impact and a suggested fix. Nothing here is hyp
   - The selector only takes effect when passed to `new x402Client(selector)`.
 - **Impact:** we pay with a remote Ledger signer, so a deterministic choice of which requirement gets signed is security-relevant. A config that type-checks but does nothing could sign a different requirement than the one the Guardian authorized. We had to pass the selector to the client constructor and re-check the choice ourselves.
 - **Suggested fix:** wire the option through or remove it from the type, and show the selector on the client constructor in the quick-start.
+
+## Flutter / Android (Bluetooth approvals in the mobile app)
+
+### 11. `ledger_flutter_plus` README doesn't match its installed API
+- **Problem:**
+  - The README shows `LedgerOperation<T>` with `write(writer, index, mtu)` / `read(reader, index, mtu)`.
+  - In 1.6.0+1 that class is `@Deprecated`, which the README doesn't mention.
+  - The working API is `LedgerRawOperation<T>` (`write` returns a list of APDUs, and BLE framing is handled internally) plus `LedgerComplexOperation<T>` for multi-APDU exchanges.
+- **Impact:** we implemented against the docs, then had to read the package source to find the real API.
+- **Suggested fix:** update the README examples and point the deprecation at the replacement classes.
+
+### 12. No status-word handling or Ethereum app plugin
+- **Problem:**
+  - Responses reach `read()` with SW1SW2 still appended, so every operation has to split out the status word and check it.
+  - There is no maintained Ethereum app plugin for `ledger_flutter_plus`.
+  - We hand-wrote GET ADDRESS, SIGN EIP-712 (v0 hashed) and chunked SIGN PERSONAL MESSAGE from `app-ethereum/doc/ethapp.adoc`, and mapped the status words ourselves.
+- **Impact:**
+  - This is security-critical code every EVM integrator rewrites.
+  - A plain-sounding operation can silently fire every personal-sign chunk before reading any reply. It has to be a `LedgerComplexOperation` instead.
+- **Suggested fix:** ship an official Ethereum signer for Flutter (like the TS signer kit) with typed status-word errors.
+
+### 13. Transitive `universal_ble` breaks Android release builds
+- **Problem:**
+  - `universal_ble` 2.1.0–2.3.0 (pulled in by `ledger_flutter_plus`) has an Android `build.gradle` with a `kotlin { compilerOptions { … } }` block but never applies the Kotlin Gradle plugin.
+  - Under Flutter 3.41's Gradle template, `assembleRelease` fails with `Could not find method kotlin() … on project ':universal_ble'`.
+- **Impact:** a fresh app with the Ledger package couldn't produce an APK. We bisected versions and pinned `universal_ble: 2.0.0` through `dependency_overrides`.
+- **Suggested fix:** pin a known-good `universal_ble` range in `ledger_flutter_plus`, and run a release-build CI check against current Flutter.
+
+### 14. Blind signing is required for x402 approvals on mobile
+- **Problem:** without an Ethereum signer that streams EIP-712 struct definitions, a mobile app can only use the v0 hashed EIP-712 command. The device then shows the domain and message hashes, not the USDC amount and recipient, and the Ethereum app needs Blind signing enabled.
+- **Impact:** the human approving a payment on a Nano X / Flex over Bluetooth can't read what they're signing on the device screen. The app has to show the details, which undercuts the hardware trust model.
+- **Suggested fix:** the Flutter signer from item 12, with full EIP-712 (struct definitions and implementations) so `TransferWithAuthorization` is clear-signed.

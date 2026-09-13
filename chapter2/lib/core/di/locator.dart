@@ -2,9 +2,12 @@ import 'package:agent_security/agent_security.dart';
 import 'package:chapter2/core/config/app_config.dart';
 import 'package:chapter2/core/network/api_client.dart';
 import 'package:chapter2/features/auth/services/auth_service.dart';
+import 'package:chapter2/features/x402_approvals/remote/x402_approvals_api_service.dart';
+import 'package:chapter2/features/x402_approvals/ledger/ledger_ble_client.dart';
 import 'package:chapter2/services/api/chapter2_api_service.dart';
 import 'package:chapter2/services/websocket/chapter2_socket_service.dart';
 import 'package:get_it/get_it.dart';
+import 'package:ledger_flutter_plus/ledger_flutter_plus.dart';
 import 'package:ledger_keyring/ledger_keyring.dart';
 
 final GetIt locator = GetIt.instance;
@@ -47,4 +50,30 @@ void setupServiceLocator({String? backendBaseUrl}) {
       () => AgentSecurity(),
     );
   }
+
+  if (!locator.isRegistered<X402ApprovalsApiService>()) {
+    locator.registerLazySingleton<X402ApprovalsApiService>(
+      () => X402ApprovalsApiService(apiClient: locator<ApiClient>()),
+    );
+  }
+
+  if (!locator.isRegistered<LedgerInterface>()) {
+    locator.registerLazySingleton<LedgerInterface>(
+      () => LedgerInterface.ble(onPermissionRequest: _requestLedgerBluetoothPermissions),
+    );
+  }
+
+  if (!locator.isRegistered<LedgerBleClient>()) {
+    locator.registerLazySingleton<LedgerBleClient>(
+      () => LedgerInterfaceBleClient(locator<LedgerInterface>()),
+    );
+  }
+}
+
+Future<bool> _requestLedgerBluetoothPermissions(AvailabilityState status) async {
+  if (await UniversalBle.hasPermissions()) {
+    return true;
+  }
+  await UniversalBle.requestPermissions();
+  return UniversalBle.hasPermissions();
 }

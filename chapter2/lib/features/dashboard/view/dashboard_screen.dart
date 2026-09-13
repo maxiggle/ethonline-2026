@@ -179,6 +179,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
               // Company Invoices & x402 Bills Quick Banner
               _buildCompanyBillsBanner(context),
               const SizedBox(height: 14),
+              // Ledger Approvals Entry Point
+              _buildLedgerApprovalsBanner(context),
+              const SizedBox(height: 14),
               // Lower Card: Split Agent/Sparkline + Recent Activity
               _buildLowerContentCard(context),
               const SizedBox(height: 16),
@@ -263,6 +266,78 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   const SizedBox(height: 2),
                   Text(
                     'Google Cloud, AWS & Alchemy • Bound to Safe',
+                    style: AppTextStyles.mono(
+                      context,
+                      fontSize: 10,
+                      color: AppColors.textMuted,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+            const Icon(
+              Icons.arrow_forward_ios_rounded,
+              size: 14,
+              color: Colors.white70,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLedgerApprovalsBanner(BuildContext context) {
+    return InkWell(
+      onTap: () => context.router.push(const X402ApprovalsRoute()),
+      borderRadius: BorderRadius.circular(22),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+        decoration: BoxDecoration(
+          color: AppColors.cardSurfacePure,
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(
+            color: AppColors.ledgerOrange.withValues(alpha: 0.35),
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: AppColors.ledgerOrange.withValues(alpha: 0.06),
+              blurRadius: 16,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 42,
+              height: 42,
+              decoration: BoxDecoration(
+                color: AppColors.ledgerOrange.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: const Icon(
+                Icons.usb_rounded,
+                color: AppColors.ledgerOrange,
+                size: 22,
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Ledger Approvals',
+                    style: AppTextStyles.sm(
+                      context,
+                      fontWeight: AppTextStyles.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Approve or reject escalated x402 payments over Bluetooth',
                     style: AppTextStyles.mono(
                       context,
                       fontSize: 10,

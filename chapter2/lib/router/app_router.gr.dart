@@ -191,3 +191,19 @@ class SplashRoute extends PageRouteInfo<void> {
     },
   );
 }
+
+/// generated route for
+/// [X402ApprovalsScreen]
+class X402ApprovalsRoute extends PageRouteInfo<void> {
+  const X402ApprovalsRoute({List<PageRouteInfo>? children})
+    : super(X402ApprovalsRoute.name, initialChildren: children);
+
+  static const String name = 'X402ApprovalsRoute';
+
+  static PageInfo page = PageInfo(
+    name,
+    builder: (data) {
+      return const X402ApprovalsScreen();
+    },
+  );
+}

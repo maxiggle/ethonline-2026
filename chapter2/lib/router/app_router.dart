@@ -4,6 +4,7 @@ import 'package:chapter2/features/auth/view/login_screen.dart';
 import 'package:chapter2/features/onboarding/view/onboarding_screen.dart';
 import 'package:chapter2/features/dashboard/view/dashboard_screen.dart';
 import 'package:chapter2/features/shell/main_shell_screen.dart';
+import 'package:chapter2/features/x402_approvals/view/x402_approvals_screen.dart';
 import 'package:flutter/material.dart';
 
 part 'app_router.gr.dart';
@@ -16,5 +17,6 @@ class AppRouter extends RootStackRouter {
     AutoRoute(page: LoginRoute.page),
     AutoRoute(page: OnboardingRoute.page),
     AutoRoute(page: DashboardRoute.page),
+    AutoRoute(page: X402ApprovalsRoute.page),
   ];
 }

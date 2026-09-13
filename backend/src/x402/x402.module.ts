@@ -15,6 +15,7 @@ import { GuardianModule } from '../guardian/guardian.module';
 import { GatewayModule } from '../gateway/gateway.module';
 import { BlockchainModule } from '../blockchain/blockchain.module';
 import { VendorModule } from '../vendor/vendor.module';
+import { WorldModule } from '../world/world.module';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { VendorModule } from '../vendor/vendor.module';
     GatewayModule,
     BlockchainModule,
     forwardRef(() => VendorModule),
+    WorldModule,
   ],
   controllers: [X402ResourcesController, X402PaymentsController, X402PurchaseRequestsController],
   providers: [

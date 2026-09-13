@@ -19,6 +19,7 @@ import { X402SpendingPolicyService } from './x402-spending-policy.service';
 import { X402_CONFIG } from './x402.constants';
 import { X402Config } from './x402.config';
 import { AuthorizePaymentDto } from './dto/authorize-payment.dto';
+import { WorldIdApproverService } from '../world/world-id-approver.service';
 
 const REJECT_MESSAGE_PREFIX = 'chapter2-reject:';
 
@@ -32,6 +33,7 @@ export class X402PaymentsService {
     private readonly onChainExecutor: OnChainExecutorService,
     private readonly databaseService: DatabaseService,
     private readonly eventsGateway: EventsGateway,
+    private readonly worldIdApproverService: WorldIdApproverService,
     @Inject(X402_CONFIG) private readonly config: X402Config,
   ) {}
 
@@ -255,6 +257,8 @@ export class X402PaymentsService {
         'Approval signature does not recover to the configured Ledger approver address',
       );
     }
+
+    await this.worldIdApproverService.assertLedgerApproverVerifiedForApproval();
 
     const now = new Date().toISOString();
     await this.databaseService.run(

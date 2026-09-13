@@ -8,6 +8,8 @@ import { ActionStoreService } from '../actions/action-store.service';
 import { EventsGateway } from '../gateway/events.gateway';
 import { OnChainExecutorService } from '../blockchain/on-chain-executor.service';
 import { DatabaseModule } from '../database/database.module';
+import { DatabaseService } from '../database/database.service';
+import { WorldIdApproverService } from '../world/world-id-approver.service';
 import { TreasuryActionStatus } from '../domain/treasury-action.entity';
 import { GuardianDecisionType } from '../domain/guardian-decision.entity';
 import { X402_CONFIG } from './x402.constants';
@@ -130,6 +132,12 @@ describe('X402PaymentsController', () => {
         { provide: X402SpendingPolicyService, useValue: spendingPolicy },
         { provide: OnChainExecutorService, useValue: onChainExecutor },
         { provide: X402_CONFIG, useValue: config },
+        {
+          provide: WorldIdApproverService,
+          useValue: {
+            assertLedgerApproverVerifiedForApproval: jest.fn().mockResolvedValue(undefined),
+          },
+        },
       ],
     })
       .overrideGuard(AgentSignatureGuard)
@@ -479,6 +487,140 @@ describe('X402PaymentsController', () => {
       const result = controller.getApprovalConfig();
       expect(result.approverAddress).toBe(config.ledgerApproverAddress);
       expect(result.network).toBe(config.network);
+    });
+  });
+
+  describe('escalated payment signature gating (World ID gate with real X402PaymentsService)', () => {
+    let realDbService: DatabaseService;
+    let worldIdConfig: any;
+    let realWorldIdApproverService: WorldIdApproverService;
+    let realPaymentsService: X402PaymentsService;
+
+    beforeEach(async () => {
+      realDbService = new DatabaseService();
+      await realDbService.initialize(':memory:');
+
+      worldIdConfig = {
+        isWorldIdRequired: true,
+        isWorldIdConfigured: true,
+        appId: 'app_staging_123',
+        rpId: 'rp_123456789abcdef0',
+        signingKeyHex: '11223344556677889900aabbccddeeff11223344556677889900aabbccddeeff',
+        action: 'chapter2-ledger-approver',
+        environment: 'staging',
+      };
+
+      realWorldIdApproverService = new WorldIdApproverService(
+        worldIdConfig,
+        config,
+        {} as any,
+        {} as any,
+        realDbService,
+      );
+
+      realPaymentsService = new X402PaymentsService(
+        actionStore,
+        spendingPolicy as any,
+        onChainExecutor as any,
+        realDbService,
+        eventsGateway,
+        realWorldIdApproverService,
+        config,
+      );
+    });
+
+    afterEach(async () => {
+      realWorldIdApproverService.onModuleDestroy();
+      await realDbService.close();
+    });
+
+    const createEscalationForReal = async (): Promise<string> => {
+      spendingPolicy.evaluate.mockReturnValue({
+        decision: GuardianDecisionType.ESCALATE,
+        riskScore: 60,
+        reasons: ['Amount exceeds autonomous limit.'],
+      });
+      const auth = await realPaymentsService.authorize(
+        buildRequest().agent,
+        authorizeDto({ paymentRequirements: { ...authorizeDto().paymentRequirements, amount: '2000000' } }),
+      );
+      await realPaymentsService.submitEscalation(
+        buildRequest().agent,
+        auth.actionId,
+        buildEscalationTypedData(),
+      );
+      return auth.actionId;
+    };
+
+    it('required+unverified -> 403 and escalation stays AWAITING', async () => {
+      worldIdConfig.isWorldIdRequired = true;
+      const actionId = await createEscalationForReal();
+      const typedData = buildEscalationTypedData();
+      const signature = await approverWallet.signTypedData(
+        typedData.domain,
+        typedData.types,
+        typedData.message,
+      );
+
+      await expect(
+        realPaymentsService.approveWithSignature(actionId, signature),
+      ).rejects.toThrow(ForbiddenException);
+
+      const rows = await realDbService.query<{ status: string }>(
+        'SELECT status FROM x402_escalations WHERE action_id = ?',
+        [actionId],
+      );
+      expect(rows[0].status).toBe('AWAITING_SIGNATURE');
+    });
+
+    it('required+verified -> success and expiry extended', async () => {
+      worldIdConfig.isWorldIdRequired = true;
+      const initialExpiry = new Date(Date.now() + 10000).toISOString();
+      await realDbService.run(
+        'INSERT OR REPLACE INTO human_bindings (signer_address, nullifier_hash, bound_at, expires_at) VALUES (?, ?, ?, ?)',
+        [approverWallet.address, '0xnullifier', new Date().toISOString(), initialExpiry],
+      );
+
+      const actionId = await createEscalationForReal();
+      const typedData = buildEscalationTypedData();
+      const signature = await approverWallet.signTypedData(
+        typedData.domain,
+        typedData.types,
+        typedData.message,
+      );
+
+      const result = await realPaymentsService.approveWithSignature(actionId, signature);
+      expect(result.status).toBe('SIGNED');
+
+      const rows = await realDbService.query(
+        'SELECT expires_at FROM human_bindings WHERE signer_address = ?',
+        [approverWallet.address],
+      );
+      const extendedExpiry = new Date(rows[0].expires_at).getTime();
+      expect(extendedExpiry).toBeGreaterThan(Date.now() + 89 * 24 * 60 * 60 * 1000);
+    });
+
+    it('not required -> success without a binding', async () => {
+      worldIdConfig.isWorldIdRequired = false;
+      const actionId = await createEscalationForReal();
+      const typedData = buildEscalationTypedData();
+      const signature = await approverWallet.signTypedData(
+        typedData.domain,
+        typedData.types,
+        typedData.message,
+      );
+
+      const result = await realPaymentsService.approveWithSignature(actionId, signature);
+      expect(result.status).toBe('SIGNED');
+    });
+
+    it('rejectWithSignature never calls the gate', async () => {
+      worldIdConfig.isWorldIdRequired = true;
+      const actionId = await createEscalationForReal();
+      const rejectSignature = await approverWallet.signMessage(`chapter2-reject:${actionId}`);
+
+      const result = await realPaymentsService.rejectWithSignature(actionId, rejectSignature);
+      expect(result.status).toBe('REJECTED');
     });
   });
 });

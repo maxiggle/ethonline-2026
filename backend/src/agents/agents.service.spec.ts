@@ -1,4 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { ConflictException } from '@nestjs/common';
+import { Wallet } from 'ethers';
 import { AgentsService } from './agents.service';
 import { DatabaseModule } from '../database/database.module';
 import { DatabaseService } from '../database/database.service';
@@ -85,33 +87,61 @@ describe('AgentsService', () => {
       ).rejects.toThrow('is not an active agent owned by the authenticated user');
     });
 
-    it('should auto-bind real user walletAddress when user exists', async () => {
-      const userId = 'did:privy:dave_with_wallet';
-      const realWallet = '0x4444444444444444444444444444444444444444';
-      const now = new Date().toISOString();
+    it('reactivates a deactivated agent instead of creating a duplicate', async () => {
+      const userId = `did:privy:rebind_${Date.now()}`;
+      const agentAddress = Wallet.createRandom().address;
+      const dto: BindAgentDto = {
+        agentAddress,
+        name: 'Rebound Agent',
+        safeAddress: '0x4f712dd78Cb1a504C69CB4f68B82Fddb6b3b1df6',
+        guardAddress: '0x9b6023D1B6D3b076C8d999Ba406AE486750ce7d3',
+        chainId: 84532,
+      };
+      const first = await service.bindAgent(userId, dto);
+      await dbService.run('UPDATE agent SET status = ?, "updatedAt" = ? WHERE "userId" = ?', [
+        'INACTIVE',
+        new Date().toISOString(),
+        userId,
+      ]);
 
-      await dbService.run(
-        'INSERT INTO "user" (id, email, name, "avatarUrl", "walletAddress", "createdAt", "updatedAt") VALUES (?, ?, ?, ?, ?, ?, ?)',
-        [userId, 'dave@example.com', 'Dave', null, realWallet, now, now],
-      );
+      const rebound = await service.bindAgent(userId, dto);
 
-      const agents = await service.ensureDefaultAgentForUser(userId);
-      expect(agents.length).toBe(1);
-      expect(agents[0].agentAddress.toLowerCase()).toBe(realWallet.toLowerCase());
-      expect(agents[0].name).toBe('Autonomous Treasury Agent');
+      expect(rebound.id).toBe(first.id);
+      expect(rebound.status).toBe('ACTIVE');
+      const rows = await dbService.query('SELECT * FROM agent WHERE "agentAddress" = ?', [agentAddress]);
+      expect(rows.length).toBe(1);
+      expect((await service.getAgentByAddress(agentAddress))?.status).toBe('ACTIVE');
     });
 
-    it('should return empty list when user has no walletAddress (zero fallback)', async () => {
-      const userId = 'did:privy:unprovisioned_user';
+    it('refuses to bind an address that is actively bound to another account', async () => {
+      const agentAddress = Wallet.createRandom().address;
+      const dto: BindAgentDto = {
+        agentAddress,
+        name: 'Contested Agent',
+        safeAddress: '0x4f712dd78Cb1a504C69CB4f68B82Fddb6b3b1df6',
+        guardAddress: '0x9b6023D1B6D3b076C8d999Ba406AE486750ce7d3',
+        chainId: 84532,
+      };
+      await service.bindAgent(`did:privy:owner_${Date.now()}`, dto);
+
+      await expect(service.bindAgent(`did:privy:other_${Date.now()}`, dto)).rejects.toThrow(ConflictException);
+    });
+
+    it('prefers the active row when an address has older inactive duplicates', async () => {
+      const userId = `did:privy:dupes_${Date.now()}`;
+      const agentAddress = Wallet.createRandom().address;
       const now = new Date().toISOString();
+      const insertSql =
+        'INSERT INTO agent (id, "userId", "agentAddress", name, purpose, "safeAddress", "guardAddress", "chainId", status, "createdAt", "updatedAt") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
+      const safe = '0x4f712dd78Cb1a504C69CB4f68B82Fddb6b3b1df6';
+      const guard = '0x9b6023D1B6D3b076C8d999Ba406AE486750ce7d3';
+      await dbService.run(insertSql, [`agent_old_${Date.now()}`, 'did:privy:previous_owner', agentAddress, 'Old', null, safe, guard, 84532, 'INACTIVE', now, now]);
+      await dbService.run(insertSql, [`agent_new_${Date.now()}`, userId, agentAddress, 'New', null, safe, guard, 84532, 'ACTIVE', now, now]);
 
-      await dbService.run(
-        'INSERT INTO "user" (id, email, name, "avatarUrl", "walletAddress", "createdAt", "updatedAt") VALUES (?, ?, ?, ?, ?, ?, ?)',
-        [userId, 'empty@example.com', 'Empty', null, null, now, now],
-      );
+      const agent = await service.getAgentByAddress(agentAddress);
 
-      const agents = await service.ensureDefaultAgentForUser(userId);
-      expect(agents).toEqual([]);
+      expect(agent?.status).toBe('ACTIVE');
+      expect(agent?.userId).toBe(userId);
     });
   });
 });

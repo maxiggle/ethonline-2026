@@ -1,11 +1,4 @@
-import {
-  Injectable,
-  Logger,
-  BadRequestException,
-  ForbiddenException,
-  NotFoundException,
-  Optional,
-} from '@nestjs/common';
+import { Injectable, Logger, BadRequestException, ForbiddenException, NotFoundException, Optional, ConflictException } from '@nestjs/common';
 import { DatabaseService } from '../database/database.service';
 import { OnChainExecutorService } from '../blockchain/on-chain-executor.service';
 import { BindAgentDto } from './dto/bind-agent.dto';
@@ -34,6 +27,28 @@ export class AgentsService {
     const guardAddress = getAddress(dto.guardAddress);
     const chainId = dto.chainId || 84532;
     const now = new Date().toISOString();
+    const existingRows = await this.dbService.query<AgentEntity>(
+      'SELECT * FROM agent WHERE "agentAddress" = ?',
+      [agentAddress],
+    );
+    const activeElsewhere = existingRows.find((row) => row.status === 'ACTIVE' && row.userId !== userId);
+    if (activeElsewhere) {
+      throw new ConflictException(`Agent ${agentAddress} is already bound to another account`);
+    }
+    const reusable = existingRows.find((row) => row.userId === userId) ?? existingRows[0];
+    if (reusable) {
+      await this.dbService.run(
+        'UPDATE agent SET "userId" = ?, name = ?, purpose = ?, "safeAddress" = ?, "guardAddress" = ?, "chainId" = ?, status = ?, "updatedAt" = ? WHERE id = ?',
+        [userId, dto.name, dto.purpose || null, safeAddress, guardAddress, chainId, 'ACTIVE', now, reusable.id],
+      );
+      const rebound = await this.getAgentById(reusable.id);
+      if (!rebound) {
+        throw new Error('Failed to retrieve re-bound agent');
+      }
+      this.logger.log(`Agent ${dto.name} (${agentAddress}) re-bound to user ${userId}`);
+      return rebound;
+    }
+
     const id = `agent_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
 
     const sql = `
@@ -99,48 +114,6 @@ export class AgentsService {
   }
 
   /**
-   * Ensures the user has at least one active autonomous agent bound to their identity.
-   * Uses the user's real provisioned Privy walletAddress with strict zero-fallback policy.
-   */
-  async ensureDefaultAgentForUser(userId: string): Promise<AgentEntity[]> {
-    const existing = await this.getAgentsForUser(userId);
-    if (existing.length > 0) {
-      return existing;
-    }
-
-    // Query authenticated user record to obtain their real Privy EVM wallet
-    const userRows = await this.dbService.query<any>(
-      'SELECT * FROM "user" WHERE id = ?',
-      [userId],
-    );
-
-    const walletAddress = userRows.length ? (userRows[0].walletAddress || userRows[0].wallet_address) : null;
-    if (!walletAddress) {
-      this.logger.log(`User ${userId} does not have a provisioned walletAddress yet; skipping agent auto-binding`);
-      return [];
-    }
-
-    const safeAddress = process.env.SAFE_ADDRESS || '0x4f712dd78Cb1a504C69CB4f68B82Fddb6b3b1df6';
-    const guardAddress = process.env.GUARD_ADDRESS || '0x9b6023D1B6D3b076C8d999Ba406AE486750ce7d3';
-    const agentAddress = walletAddress;
-
-    try {
-      const created = await this.bindAgent(userId, {
-        agentAddress,
-        name: 'Autonomous Treasury Agent',
-        purpose: 'Supervised treasury execution and automated operational disbursements',
-        safeAddress,
-        guardAddress,
-        chainId: process.env.CHAIN_ID ? Number(process.env.CHAIN_ID) : 84532,
-      });
-      return [created];
-    } catch (err: any) {
-      this.logger.warn(`Failed to auto-bind default agent for user ${userId}: ${err.message}`);
-      return [];
-    }
-  }
-
-  /**
    * Retrieves an agent by its unique database ID.
    */
   async getAgentById(id: string): Promise<AgentEntity | null> {
@@ -160,7 +133,7 @@ export class AgentsService {
       'SELECT * FROM agent WHERE "agentAddress" = ?',
       [normalized],
     );
-    return rows.length > 0 ? rows[0] : null;
+    return rows.find((row) => row.status === 'ACTIVE') ?? rows[0] ?? null;
   }
 
   /**

@@ -4,6 +4,7 @@ import 'package:chapter2/core/network/api_client.dart';
 import 'package:chapter2/features/auth/services/auth_service.dart';
 import 'package:chapter2/features/services/remote/services_api_service.dart';
 import 'package:chapter2/features/shell/shell_tab_controller.dart';
+import 'package:chapter2/features/world_id/remote/world_id_api_service.dart';
 import 'package:chapter2/features/x402_approvals/remote/x402_approvals_api_service.dart';
 import 'package:chapter2/features/x402_approvals/ledger/ledger_ble_client.dart';
 import 'package:chapter2/services/api/chapter2_api_service.dart';
@@ -56,6 +57,12 @@ void setupServiceLocator({String? backendBaseUrl}) {
   if (!locator.isRegistered<X402ApprovalsApiService>()) {
     locator.registerLazySingleton<X402ApprovalsApiService>(
       () => X402ApprovalsApiService(apiClient: locator<ApiClient>()),
+    );
+  }
+
+  if (!locator.isRegistered<WorldIdApiService>()) {
+    locator.registerLazySingleton<WorldIdApiService>(
+      () => WorldIdApiService(apiClient: locator<ApiClient>()),
     );
   }
 

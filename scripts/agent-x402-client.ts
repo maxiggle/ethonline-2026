@@ -1,260 +1,170 @@
 /**
- * Chapter 2: Autonomous Agent x402 Payment Loop Client
+ * Chapter 2: Guardian-gated x402 v2 agent demo client.
  *
- * Demonstrates the complete HTTP 402 autonomous challenge, company invoice settlement,
- * and Bazaar discovery flow:
- * 1. x402 Bazaar Service Discovery -> Queries catalog for available endpoints
- * 2. Enterprise Account Invoices -> Queries outstanding company invoices
- * 3. Autonomous Bill Payment -> Dispatches payment for corporate bill with dynamic agent identity
- * 4. Guardian Tri-Verdict Policy Check -> Evaluates Safe mandate autonomous spending limit
- * 5. On-Chain Safe Transaction Execution & Settlement via Relayer
- * 6. Resource Access & Verification -> Verifies corporate receipt with X-Payment-Identifier
- *
- * Treasury routes require the Privy bearer token of the user who owns AGENT_ADDRESS (AUTH_TOKEN).
+ * An autonomous agent discovers paid x402 resources on Base Sepolia and asks the Chapter 2
+ * Guardian before ever signing a payment:
+ *   - ALLOW      -> paid by the agent's own Key Ring-protected wallet.
+ *   - ESCALATE   -> paid by a signature collected on the human's Ledger via the web approval
+ *                   console; this client only posts the typed data and polls for the result.
+ *   - BLOCK      -> refused outright; no payment signature is ever created.
+ * Every settlement is a real Base Sepolia USDC transfer, verified on-chain by the backend before
+ * the corresponding `TreasuryAction` is marked `EXECUTED`.
  */
+import { getAddress, type Address } from 'viem';
 
-async function main() {
-  console.log('\n===============================================================');
-  console.log('  CHAPTER 2: ENTERPRISE x402 BAZAAR & INVOICE CLIENT');
-  console.log('===============================================================\n');
+import { loadAgentAccount } from './lib/agent-account.js';
+import { createLedgerRemoteSigner } from './lib/ledger-remote-signer.js';
+import { readUsdcBalance } from './lib/usdc-balance.js';
+import { payX402Resource, type PayResourceResult } from './lib/x402-payment-flow.js';
 
-  const serverUrl = process.env.API_BASE_URL;
-  if (!serverUrl) {
-    console.error('[CONFIGURATION ERROR]: Missing required environment variable API_BASE_URL.');
-    console.error('Please specify API_BASE_URL explicitly without fallbacks, for example:');
-    console.error('  API_BASE_URL=https://chapter2-backend.onrender.com npx ts-node scripts/agent-x402-client.ts');
-    console.error('  or');
-    console.error('  API_BASE_URL=http://localhost:3000 npx ts-node scripts/agent-x402-client.ts\n');
-    process.exit(1);
+const BASE_SEPOLIA_RPC_URL = 'https://sepolia.base.org';
+
+interface ApprovalConfig {
+  approverAddress: string;
+  network: string;
+  usdcAddress: string;
+}
+
+type ScenarioName = 'allow' | 'escalate' | 'block';
+
+interface Scenario {
+  name: ScenarioName;
+  title: string;
+  resourcePath: string;
+  justification: string;
+}
+
+const SCENARIOS: Scenario[] = [
+  {
+    name: 'allow',
+    title: 'ALLOW: real-time weather (within the autonomous limit)',
+    resourcePath: '/x402/weather?city=Lagos',
+    justification: 'Fetch current weather for Lagos to brief the morning report.',
+  },
+  {
+    name: 'escalate',
+    title: 'ESCALATE: Base Sepolia chain report (above the autonomous limit)',
+    resourcePath: '/x402/chain-report',
+    justification: 'Fetch the latest Base Sepolia chain report for the treasury dashboard.',
+  },
+  {
+    name: 'block',
+    title: 'BLOCK: partner feed (unapproved payee)',
+    resourcePath: '/x402/partner-feed',
+    justification: 'Fetch the partner chain feed for a cross-check.',
+  },
+];
+
+function requireEnv(name: string): string {
+  const value = process.env[name];
+  if (!value || value.trim().length === 0) {
+    throw new Error(`Missing required environment variable: ${name}. See docs/tickets/README.md.`);
   }
+  return value.trim();
+}
 
-  const authToken = process.env.AUTH_TOKEN;
-  if (!authToken) {
-    console.error('[CONFIGURATION ERROR]: Missing required environment variable AUTH_TOKEN.');
-    console.error('Provide the Privy bearer token of the user who owns the autonomous agent.\n');
-    process.exit(1);
+function parseScenarioArg(argv: string[]): ScenarioName | 'all' {
+  const flag = argv.find((arg) => arg.startsWith('--scenario='));
+  const value = flag ? flag.slice('--scenario='.length) : 'all';
+  if (value !== 'all' && value !== 'allow' && value !== 'escalate' && value !== 'block') {
+    throw new Error(`Invalid --scenario value '${value}'; expected allow, escalate, block or all`);
   }
-  const authorizationHeaders = { Authorization: `Bearer ${authToken}` };
-  const authorizedJsonHeaders = { ...authorizationHeaders, 'Content-Type': 'application/json' };
+  return value;
+}
 
-  // Verify server reachability
+async function printBalances(usdcAddress: Address, agentAddress: Address, ledgerAddress: Address): Promise<void> {
+  const [agentBalance, ledgerBalance] = await Promise.all([
+    readUsdcBalance(usdcAddress, agentAddress, BASE_SEPOLIA_RPC_URL),
+    readUsdcBalance(usdcAddress, ledgerAddress, BASE_SEPOLIA_RPC_URL),
+  ]);
+  console.log(`  Agent USDC balance  (${agentAddress}): ${agentBalance.formatted} USDC`);
+  console.log(`  Ledger USDC balance (${ledgerAddress}): ${ledgerBalance.formatted} USDC`);
+}
+
+async function runScenario(
+  scenario: Scenario,
+  baseUrl: string,
+  agentAccount: Awaited<ReturnType<typeof loadAgentAccount>>,
+  config: ApprovalConfig,
+): Promise<void> {
+  console.log(`\n=== ${scenario.title} ===`);
+  console.log(`Resource: GET ${scenario.resourcePath}`);
+
+  await printBalances(
+    getAddress(config.usdcAddress),
+    agentAccount.address,
+    getAddress(config.approverAddress),
+  );
+
+  let result: PayResourceResult;
   try {
-    const healthCheck = await fetch(`${serverUrl}/mandates/active`, { signal: AbortSignal.timeout(3000) });
-    if (healthCheck.status >= 500) {
-      throw new Error(`Server returned error status ${healthCheck.status}`);
-    }
-    console.log(`[NETWORK] Connected to live Chapter 2 backend at ${serverUrl}`);
-  } catch (err) {
-    throw new Error(`Could not reach Chapter 2 backend at ${serverUrl}. Ensure the service is running. Error: ${err}`);
-  }
-
-  // Dynamically resolve autonomous agent identity from live on-chain Safe mandate or env
-  let agentAddress = process.env.AGENT_ADDRESS;
-  if (!agentAddress) {
-    console.log('[AGENT IDENTITY] Resolving authorized autonomous agent from active mandate...');
-    const mandateRes = await fetch(`${serverUrl}/mandates/active`);
-    if (!mandateRes.ok) {
-      throw new Error(`Failed to query active mandate from ${serverUrl}/mandates/active: ${mandateRes.status}`);
-    }
-    const mandateData: any = await mandateRes.json();
-    if (!mandateData.autonomousAgent) {
-      throw new Error('No authorized autonomous agent configured in the active Safe mandate. Specify AGENT_ADDRESS in env.');
-    }
-    agentAddress = mandateData.autonomousAgent as string;
-    console.log(`[AGENT IDENTITY] Dynamically bound to authorized agent from on-chain mandate: ${agentAddress}\n`);
-  } else {
-    console.log(`[AGENT IDENTITY] Using authorized agent from environment: ${agentAddress}\n`);
-  }
-
-  // -------------------------------------------------------------
-  // STEP 1: Discover Services via x402 Bazaar Discovery Protocol
-  // -------------------------------------------------------------
-  console.log('-------------------------------------------------------------');
-  console.log('[STEP 1] Querying x402 Bazaar Catalog: GET /discovery/resources');
-  console.log('-------------------------------------------------------------');
-
-  const bazaarRes = await fetch(`${serverUrl}/discovery/resources`);
-  if (bazaarRes.ok) {
-    const bazaarData: any = await bazaarRes.json();
-    console.log(`[BAZAAR DISCOVERY] Protocol: ${bazaarData.protocol || 'x402-bazaar'} | Version: ${bazaarData.version || '0.1.0'}`);
-    const items = (bazaarData.items as any[]) || [];
-    console.log(`Discovered ${items.length} registered x402 payable endpoints:`);
-    for (const item of items) {
-      const accept = item.accepts?.[0] || {};
-      console.log(`  ├─ ${item.extensions?.bazaar?.info?.serviceName || item.resource}`);
-      console.log(`  │  Endpoint: ${item.resource} | Cost: ${Number(accept.amount || 0) / 1e6} USDC | PayTo: ${accept.payTo}`);
-      console.log(`  │  Payment-Identifier: ${accept.extra?.paymentIdentifier || 'none'}`);
-    }
-    console.log('');
-  } else {
-    console.log(`[BAZAAR DISCOVERY] Note: GET /discovery/resources returned status ${bazaarRes.status}`);
-  }
-
-  // -------------------------------------------------------------
-  // STEP 1B: Search Bazaar Services (e.g. "weather APIs")
-  // -------------------------------------------------------------
-  console.log('-------------------------------------------------------------');
-  console.log('[STEP 1B] Searching Bazaar Catalog: GET /discovery/search?query=weather%20APIs&type=http');
-  console.log('-------------------------------------------------------------');
-
-  const searchRes = await fetch(`${serverUrl}/discovery/search?query=weather%20APIs&type=http`);
-  if (searchRes.ok) {
-    const searchResults: any = await searchRes.json();
-    console.log(`Found ${searchResults.resources?.length || 0} services matching "weather APIs":`);
-    for (const s of (searchResults.resources || [])) {
-      const info = s.extensions?.bazaar?.info;
-      console.log(`  ├─ ${info?.serviceName} ($${Number(s.accepts?.[0]?.amount || 0) / 1e6} USDC)`);
-      console.log(`  │  Endpoint: ${s.resource} | Method: ${info?.input?.method || 'GET'}`);
-      console.log(`  │  Default Params: ${JSON.stringify(info?.input?.queryParams || {})}`);
-    }
-    if (searchResults.pagination) {
-      console.log(`  └─ Next page cursor: ${searchResults.pagination.cursor}`);
-    }
-    console.log('');
-
-    // Demonstrate calling the selected service with x402 payment
-    const selectedService = searchResults.resources?.[0];
-    if (selectedService) {
-      console.log('-------------------------------------------------------------');
-      console.log(`[STEP 1C] Invoking Selected Service: POST /discovery/call (${selectedService.extensions?.bazaar?.info?.serviceName})`);
-      console.log('-------------------------------------------------------------');
-      const input = selectedService.extensions?.bazaar?.info?.input;
-      const callRes = await fetch(`${serverUrl}/discovery/call`, {
-        method: 'POST',
-        headers: authorizedJsonHeaders,
-        body: JSON.stringify({
-          resourceUrl: selectedService.resource,
-          method: input?.method ?? 'GET',
-          params: input?.queryParams ?? { city: 'San Francisco' },
-          agentAddress,
+    result = await payX402Resource({
+      baseUrl,
+      network: config.network,
+      usdcAddress: config.usdcAddress,
+      resourcePath: scenario.resourcePath,
+      justification: scenario.justification,
+      agentAccount,
+      agentEvmSigner: agentAccount,
+      createLedgerSigner: (actionId) =>
+        createLedgerRemoteSigner({
+          approverAddress: getAddress(config.approverAddress),
+          actionId,
+          agentAccount,
+          baseUrl,
         }),
-      });
-
-      if (callRes.ok) {
-        const callResult: any = await callRes.json();
-        console.log(`[CALL SUCCESS] ${callResult.serviceName}`);
-        console.log(`  ├─ Cost       : $${callResult.costUsdc} USDC`);
-        console.log(`  ├─ Tx Hash    : ${callResult.txHash}`);
-        console.log(`  └─ Response   : ${JSON.stringify(callResult.data)}\n`);
-      } else {
-        console.log(`[CALL FAILED] POST /discovery/call returned ${callRes.status}: ${await callRes.text()}\n`);
-      }
-    }
-  }
-
-  // -------------------------------------------------------------
-  // STEP 2: Query Enterprise Connected Accounts & Invoices
-  // -------------------------------------------------------------
-  console.log('-------------------------------------------------------------');
-  console.log('[STEP 2] Fetching Enterprise Company Invoices: GET /vendor/bills');
-  console.log('-------------------------------------------------------------');
-
-  const billsRes = await fetch(`${serverUrl}/vendor/bills`, { headers: authorizationHeaders });
-  if (!billsRes.ok) {
-    throw new Error(`Failed to fetch bills from ${serverUrl}/vendor/bills: ${billsRes.status} ${billsRes.statusText}`);
-  }
-
-  const bills = (await billsRes.json()) as any[];
-  console.log(`Found ${bills.length} corporate bills for enterprise account:`);
-  for (const b of bills) {
-    console.log(`  ├─ [${b.status}] ${b.provider?.toUpperCase()} - ${b.invoiceNumber}: $${b.amountUsdc} USDC (${b.description})`);
-    console.log(`  │  Payment Identifier: ${b.paymentIdentifier} | Due: ${b.dueDate}`);
-  }
-  console.log('');
-
-  const targetBill = bills.find((b: any) => b.amountUsdc <= 50) || bills[0];
-  let billTxHash: string | undefined;
-
-  if (!targetBill) {
-    console.log('[INFO] No pending corporate bills in queue (Clean zero-fallback state).');
-  } else {
-    const billId = targetBill.id;
-
-    // -------------------------------------------------------------
-    // STEP 3: Request x402 Challenge for Bill (${targetBill.invoiceNumber})
-    // -------------------------------------------------------------
-    console.log('-------------------------------------------------------------');
-    console.log(`[STEP 3] Fetching x402 Challenge: GET /vendor/bills/${billId}`);
-    console.log('-------------------------------------------------------------');
-
-    const challengeRes = await fetch(`${serverUrl}/vendor/bills/${billId}`);
-    console.log(`[HTTP RESPONSE] Status: ${challengeRes.status} ${challengeRes.statusText}`);
-
-    const paymentAddress = challengeRes.headers.get('x-payment-address');
-    const paymentAmount = challengeRes.headers.get('x-payment-amount');
-    const paymentToken = challengeRes.headers.get('x-payment-token');
-    const paymentIdentifier = challengeRes.headers.get('x-payment-identifier');
-
-    console.log('\n[x402 CHALLENGE DETAILS]');
-    console.log(`  ├─ Vendor Payment Address : ${paymentAddress}`);
-    console.log(`  ├─ Required Token Amount  : ${paymentAmount} (${Number(paymentAmount || 0) / 1e6} USDC)`);
-    console.log(`  ├─ Approved Token Address : ${paymentToken}`);
-    console.log(`  └─ Payment Identifier     : ${paymentIdentifier}\n`);
-
-    // -------------------------------------------------------------
-    // STEP 4: Pay Corporate Bill via Chapter 2 Guardian Orchestrator
-    // -------------------------------------------------------------
-    console.log('-------------------------------------------------------------');
-    console.log(`[STEP 4] Paying Company Bill: POST /vendor/bills/${billId}/pay`);
-    console.log('-------------------------------------------------------------');
-
-    const payRes = await fetch(`${serverUrl}/vendor/bills/${billId}/pay`, {
-      method: 'POST',
-      headers: authorizedJsonHeaders,
-      body: JSON.stringify({ agentAddress }),
+      onWaitingForApproval: () => console.log('  Waiting for approval on Ledger console...'),
     });
-
-    if (!payRes.ok) {
-      const err = await payRes.text();
-      throw new Error(`Bill payment failed (${payRes.status}): ${err}`);
-    }
-
-    const payResult: any = await payRes.json();
-    billTxHash = payResult.bill?.txHash || payResult.action?.txHash;
-
-    console.log(`[GUARDIAN VERDICT] Action ID: ${payResult.action?.id}`);
-    console.log(`  ├─ Guardian Decision      : ${payResult.decision?.decision}`);
-    console.log(`  ├─ Risk Score             : ${payResult.decision?.riskScore} / 100`);
-    console.log(`  ├─ Bill Status            : ${payResult.bill?.status}`);
-    console.log(`  ├─ Verified On-Chain Hash : ${billTxHash || 'Pending Relayer'}`);
-    if (billTxHash) {
-      console.log(`  └─ Block Explorer Link    : https://sepolia.base.org/tx/${billTxHash}\n`);
-    }
+  } catch (err) {
+    console.error(`  Scenario '${scenario.name}' failed: ${err instanceof Error ? err.message : err}`);
+    throw err;
   }
 
-  // -------------------------------------------------------------
-  // STEP 5: Unlock Resource with Proof-of-Payment Header
-  // -------------------------------------------------------------
-  if (billTxHash) {
-    console.log('-------------------------------------------------------------');
-    console.log('[STEP 5] Verifying Resource Access: GET /vendor/compute');
-    console.log('-------------------------------------------------------------');
-
-    const unlockRes = await fetch(`${serverUrl}/vendor/compute`, {
-      method: 'GET',
-      headers: {
-        'X-Payment-TxHash': billTxHash,
-      },
-    });
-
-    console.log(`[HTTP RESPONSE] Status: ${unlockRes.status} ${unlockRes.statusText}`);
-
-    if (unlockRes.ok) {
-      const computeAccess: any = await unlockRes.json();
-      console.log('\n===============================================================');
-      console.log('  SUCCESS: CORPORATE BILL SETTLED & WORKLOAD UNLOCKED');
-      console.log('===============================================================');
-      console.log(`  ├─ Resource Status    : ${computeAccess.status}`);
-      console.log(`  ├─ Granted Resource   : ${computeAccess.resource}`);
-      console.log(`  ├─ Session Token      : ${computeAccess.sessionToken}`);
-      console.log(`  ├─ Allocated Specs    : ${computeAccess.details?.specs}`);
-      console.log(`  ├─ Settlement Tx      : ${computeAccess.txHash}`);
-      console.log('===============================================================\n');
+  if (result.kind === 'BLOCK') {
+    console.log(`  BLOCKED (action ${result.actionId}, risk score ${result.riskScore}):`);
+    for (const reason of result.reasons) {
+      console.log(`    - ${reason}`);
     }
+    return;
   }
+
+  console.log(`  Guardian decision: ${result.decision} (action ${result.actionId})`);
+  console.log(`  Settled transaction: ${result.transactionHash}`);
+  console.log(`  Explorer: https://base-sepolia.blockscout.com/tx/${result.transactionHash}`);
+  console.log(`  Response data: ${JSON.stringify(result.data)}`);
+}
+
+async function main(): Promise<void> {
+  const baseUrl = requireEnv('API_BASE_URL').replace(/\/+$/, '');
+  requireEnv('WALLET_PASS');
+  requireEnv('AGENT_KEY_RING_FILE');
+  requireEnv('AGENT_KEY_RING_KEY_NAME');
+
+  const scenarioArg = parseScenarioArg(process.argv.slice(2));
+  const scenarios = scenarioArg === 'all' ? SCENARIOS : SCENARIOS.filter((s) => s.name === scenarioArg);
+
+  console.log('Chapter 2: Guardian-gated x402 v2 agent demo');
+  console.log(`Backend: ${baseUrl}`);
+
+  const agentAccount = await loadAgentAccount();
+  console.log(`Agent address: ${agentAccount.address}`);
+
+  const configResponse = await fetch(`${baseUrl}/x402/approvals/config`);
+  if (!configResponse.ok) {
+    throw new Error(`GET /x402/approvals/config failed: ${configResponse.status} ${await configResponse.text()}`);
+  }
+  const config = (await configResponse.json()) as ApprovalConfig;
+  console.log(`Ledger approver address: ${config.approverAddress}`);
+  console.log(`Network: ${config.network} | USDC: ${config.usdcAddress}`);
+
+  for (const scenario of scenarios) {
+    await runScenario(scenario, baseUrl, agentAccount, config);
+  }
+
+  console.log('\nDemo complete.');
 }
 
 main().catch((err) => {
-  console.error('\n[FATAL CLIENT ERROR]:', err);
+  console.error(err instanceof Error ? err.message : err);
   process.exit(1);
 });

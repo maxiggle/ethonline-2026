@@ -2,6 +2,7 @@ import 'package:chapter2/features/dashboard/cubit/dashboard_cubit.dart';
 import 'package:chapter2/features/dashboard/cubit/dashboard_state.dart';
 import 'package:chapter2/features/guardian_alert/view/guardian_analysis_sheet.dart';
 import 'package:chapter2/features/timeline/models/treasury_action.dart';
+import 'package:chapter2/features/x402_approvals/utils/usdc_amount_formatter.dart';
 import 'package:chapter2/shared/theme/chapter2_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -295,7 +296,7 @@ class _ActivityTimelineScreenState extends State<ActivityTimelineScreen> {
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Text(
-                  '-\$${action.amountDisplayUsdc.toStringAsFixed(2)}',
+                  '-\$${UsdcAmountFormatter.format(action.amountUnits.toString())}',
                   style: AppTextStyles.md(
                     context,
                     fontWeight: AppTextStyles.bold,

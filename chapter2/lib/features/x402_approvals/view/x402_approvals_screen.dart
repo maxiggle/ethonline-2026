@@ -7,6 +7,7 @@ import 'package:chapter2/features/x402_approvals/remote/models/pending_x402_appr
 import 'package:chapter2/features/x402_approvals/utils/usdc_amount_formatter.dart';
 import 'package:chapter2/shared/theme/chapter2_theme.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:ledger_flutter_plus/ledger_flutter_plus.dart';
 
@@ -280,8 +281,8 @@ class _X402ApprovalsScreenState extends State<X402ApprovalsScreen> {
             style: AppTextStyles.xl(context),
           ),
           const SizedBox(height: 8),
-          _buildDetailRow(context, 'Payee', approval.payTo),
-          _buildDetailRow(context, 'Agent', approval.agentAddress),
+          _buildDetailRow(context, 'Payee', approval.payTo, isAddress: true),
+          _buildDetailRow(context, 'Agent', approval.agentAddress, isAddress: true),
           _buildDetailRow(
             context,
             'Expires',
@@ -330,7 +331,15 @@ class _X402ApprovalsScreenState extends State<X402ApprovalsScreen> {
     );
   }
 
-  Widget _buildDetailRow(BuildContext context, String label, String value, {Color? valueColor}) {
+  Widget _buildDetailRow(
+    BuildContext context,
+    String label,
+    String value, {
+    Color? valueColor,
+    bool isAddress = false,
+  }) {
+    final display = isAddress ? _shortenAddress(value) : value;
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 4),
       child: Row(
@@ -338,15 +347,42 @@ class _X402ApprovalsScreenState extends State<X402ApprovalsScreen> {
         children: [
           Text(label, style: AppTextStyles.sm(context)),
           Flexible(
-            child: Text(
-              value,
-              style: AppTextStyles.mono(context, fontSize: 11, color: valueColor),
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.right,
-            ),
+            child: isAddress
+                ? InkWell(
+                    onTap: () => _copyToClipboard(context, label, value),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          display,
+                          style: AppTextStyles.mono(context, fontSize: 11, color: valueColor),
+                        ),
+                        const SizedBox(width: 4),
+                        const Icon(Icons.copy_rounded, size: 12, color: AppColors.textMuted),
+                      ],
+                    ),
+                  )
+                : Text(
+                    display,
+                    style: AppTextStyles.mono(context, fontSize: 11, color: valueColor),
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.right,
+                  ),
           ),
         ],
       ),
+    );
+  }
+
+  String _shortenAddress(String address) {
+    if (address.length <= 12) return address;
+    return '${address.substring(0, 6)}…${address.substring(address.length - 4)}';
+  }
+
+  void _copyToClipboard(BuildContext context, String label, String value) {
+    Clipboard.setData(ClipboardData(text: value));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Copied $label'), behavior: SnackBarBehavior.floating),
     );
   }
 

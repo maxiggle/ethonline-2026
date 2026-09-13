@@ -40,6 +40,10 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>Chapter 2 connects to your Ledger over Bluetooth to approve payments.</string>
+	<key>NSBluetoothPeripheralUsageDescription</key>
+	<string>Chapter 2 connects to your Ledger over Bluetooth to approve payments.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

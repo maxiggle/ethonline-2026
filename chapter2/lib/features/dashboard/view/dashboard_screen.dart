@@ -378,7 +378,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  '-\$${action.amountDisplayUsdc.toStringAsFixed(2)} USDC',
+                  '-\$${UsdcAmountFormatter.format(action.amountUnits.toString())} USDC',
                   style: AppTextStyles.xs(context, color: AppColors.textMuted),
                 ),
               ],

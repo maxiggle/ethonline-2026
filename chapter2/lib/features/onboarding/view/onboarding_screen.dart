@@ -510,10 +510,15 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               const SizedBox(height: 32),
               SizedBox(
                 height: 52,
-                child: ElevatedButton(
-                  onPressed: _completeOnboarding,
-                  child: Text(isReady ? 'Finish' : "I'll connect later"),
-                ),
+                child: isReady
+                    ? ElevatedButton(
+                        onPressed: _completeOnboarding,
+                        child: const Text('Finish'),
+                      )
+                    : OutlinedButton(
+                        onPressed: _completeOnboarding,
+                        child: const Text("I'll connect later"),
+                      ),
               ),
             ],
           ),

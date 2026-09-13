@@ -4,6 +4,8 @@ import 'package:chapter2/features/auth/services/auth_service.dart';
 import 'package:chapter2/features/dashboard/cubit/dashboard_cubit.dart';
 import 'package:chapter2/features/services/cubit/services_cubit.dart';
 import 'package:chapter2/features/services/remote/services_api_service.dart';
+import 'package:chapter2/features/world_id/cubit/world_id_approver_cubit.dart';
+import 'package:chapter2/features/world_id/remote/world_id_api_service.dart';
 import 'package:chapter2/features/x402_approvals/cubit/x402_approvals_cubit.dart';
 import 'package:chapter2/features/x402_approvals/remote/x402_approvals_api_service.dart';
 import 'package:chapter2/features/x402_approvals/ledger/ledger_ble_client.dart';
@@ -46,6 +48,9 @@ class Chapter2App extends StatelessWidget {
           ),
           BlocProvider<ServicesCubit>(
             create: (ctx) => ServicesCubit(apiService: locator<ServicesApiService>()),
+          ),
+          BlocProvider<WorldIdApproverCubit>(
+            create: (ctx) => WorldIdApproverCubit(apiService: locator<WorldIdApiService>()),
           ),
         ],
         child: MaterialApp.router(

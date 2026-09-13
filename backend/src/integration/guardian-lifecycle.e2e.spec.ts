@@ -72,15 +72,9 @@ describe('Guardian Lifecycle & Tri-Verdict E2E Integration Suite', () => {
 
     eventsGateway.server = mockSocketServer as Server;
 
-    // The suite exercises the supervisory pipeline only; it must never broadcast Base Sepolia transactions
+    // The executor is read-only; stub the one on-chain read the approval path makes
     const onChainExecutor = moduleRef.get<OnChainExecutorService>(OnChainExecutorService);
     jest.spyOn(onChainExecutor, 'getGuardHumanSigner').mockResolvedValue(hardwareSignerAddress);
-    jest
-      .spyOn(onChainExecutor, 'executeAutonomousPayment')
-      .mockRejectedValue(new Error('On-chain broadcasting is disabled in the e2e suite'));
-    jest
-      .spyOn(onChainExecutor, 'executeEscalatedPayment')
-      .mockRejectedValue(new Error('On-chain broadcasting is disabled in the e2e suite'));
   });
 
   afterEach(async () => {

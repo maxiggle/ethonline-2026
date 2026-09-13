@@ -1,6 +1,5 @@
-import { Injectable, Logger, BadRequestException, ForbiddenException, NotFoundException, Optional, ConflictException } from '@nestjs/common';
+import { Injectable, Logger, BadRequestException, ForbiddenException, NotFoundException, ConflictException } from '@nestjs/common';
 import { DatabaseService } from '../database/database.service';
-import { OnChainExecutorService } from '../blockchain/on-chain-executor.service';
 import { BindAgentDto } from './dto/bind-agent.dto';
 import { AgentEntity } from './interfaces/agent.interface';
 import { getAddress } from 'ethers';
@@ -11,7 +10,6 @@ export class AgentsService {
 
   constructor(
     private readonly dbService: DatabaseService,
-    @Optional() private readonly onChainExecutor?: OnChainExecutorService,
   ) {}
 
   /**
@@ -79,18 +77,6 @@ export class AgentsService {
       );
     } catch (err: any) {
       this.logger.debug(`Could not update mandate autonomous_agent: ${err.message}`);
-    }
-
-    // Synchronize with live on-chain Chapter2Guard contract asynchronously
-    if (this.onChainExecutor) {
-      this.onChainExecutor
-        .setAutonomousAgent(agentAddress)
-        .then((txHash) => {
-          this.logger.log(`On-chain Chapter2Guard updated with autonomous agent: ${agentAddress} (Tx: ${txHash})`);
-        })
-        .catch((onChainErr: any) => {
-          this.logger.warn(`On-chain agent registration warning: ${onChainErr.message}`);
-        });
     }
 
     const created = await this.getAgentById(id);

@@ -23,10 +23,6 @@ services:
         value: 0x4f712dd78Cb1a504C69CB4f68B82Fddb6b3b1df6
       - key: GUARD_ADDRESS
         value: 0x9b6023D1B6D3b076C8d999Ba406AE486750ce7d3
-      - key: RELAYER_PRIVATE_KEY
-        sync: false
-      - key: DEPLOYER_PRIVATE_KEY
-        sync: false
       - key: PRIVY_APP_ID
         value: cmtxqm6nq004l0clgqp0hhtoz
       - key: PRIVY_APP_SECRET

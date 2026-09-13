@@ -136,9 +136,7 @@ async function runScenario(
 
 async function main(): Promise<void> {
   const baseUrl = requireEnv('API_BASE_URL').replace(/\/+$/, '');
-  requireEnv('WALLET_PASS');
-  requireEnv('AGENT_KEY_RING_FILE');
-  requireEnv('AGENT_KEY_RING_KEY_NAME');
+  const keySource = requireEnv('AGENT_KEY_SOURCE');
 
   const scenarioArg = parseScenarioArg(process.argv.slice(2));
   const scenarios = scenarioArg === 'all' ? SCENARIOS : SCENARIOS.filter((s) => s.name === scenarioArg);
@@ -147,7 +145,7 @@ async function main(): Promise<void> {
   console.log(`Backend: ${baseUrl}`);
 
   const agentAccount = await loadAgentAccount();
-  console.log(`Agent address: ${agentAccount.address}`);
+  console.log(`Agent address: ${agentAccount.address} (key source: ${keySource})`);
 
   const configResponse = await fetch(`${baseUrl}/x402/approvals/config`);
   if (!configResponse.ok) {

@@ -24,6 +24,7 @@ export function buildX402Routes(config: X402Config): RoutesConfig {
         price: '$2.00',
         network: config.network,
         payTo: config.payToAddress,
+        maxTimeoutSeconds: 900,
       },
       description: 'Live Base Sepolia chain report: latest block, fee data and USDC supply',
       mimeType: 'application/json',

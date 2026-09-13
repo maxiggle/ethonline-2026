@@ -21,6 +21,14 @@ class X402ApprovalsScreen extends StatefulWidget {
 }
 
 class _X402ApprovalsScreenState extends State<X402ApprovalsScreen> {
+  X402ApprovalsCubit? _cubit;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _cubit = context.read<X402ApprovalsCubit>();
+  }
+
   @override
   void initState() {
     super.initState();
@@ -33,14 +41,17 @@ class _X402ApprovalsScreenState extends State<X402ApprovalsScreen> {
 
   @override
   void dispose() {
-    context.read<X402ApprovalsCubit>().stopPolling();
+    // Read the cubit via the cached reference, not `context.read`: by the
+    // time dispose() runs the BlocProvider ancestor may already be
+    // deactivated (e.g. when the whole tree is torn down together).
+    _cubit?.stopPolling();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.screenBackground,
+      backgroundColor: AppColors.background,
       appBar: AppBar(title: const Text('Ledger Approvals')),
       body: BlocConsumer<X402ApprovalsCubit, X402ApprovalsState>(
         listenWhen: (previous, current) =>
@@ -133,9 +144,9 @@ class _X402ApprovalsScreenState extends State<X402ApprovalsScreen> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppColors.cardSurfacePure,
+        color: AppColors.surface,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.cardBorder),
+        border: Border.all(color: AppColors.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -153,20 +164,25 @@ class _X402ApprovalsScreenState extends State<X402ApprovalsScreen> {
                 child: Text(
                   isConnected ? 'Ledger connected' : 'No Ledger connected',
                   style: AppTextStyles.md(context, fontWeight: AppTextStyles.bold),
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
-              ElevatedButton.icon(
-                onPressed: isConnecting ? null : () => _openDeviceScanSheet(context),
-                icon: isConnecting
-                    ? const SizedBox(
-                        height: 14,
-                        width: 14,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Icon(Icons.bluetooth_searching_rounded, size: 18),
-                label: Text(isConnected ? 'Reconnect' : 'Connect Ledger'),
-              ),
             ],
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: isConnecting ? null : () => _openDeviceScanSheet(context),
+              icon: isConnecting
+                  ? const SizedBox(
+                      height: 14,
+                      width: 14,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.bluetooth_searching_rounded, size: 18),
+              label: Text(isConnected ? 'Reconnect' : 'Connect Ledger'),
+            ),
           ),
           if (isConnected) ...[
             const SizedBox(height: 10),
@@ -202,9 +218,9 @@ class _X402ApprovalsScreenState extends State<X402ApprovalsScreen> {
       padding: const EdgeInsets.symmetric(vertical: 32),
       alignment: Alignment.center,
       decoration: BoxDecoration(
-        color: AppColors.cardSurfacePure,
+        color: AppColors.surface,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppColors.cardBorder),
+        border: Border.all(color: AppColors.border),
       ),
       child: Text(
         'No escalated payments are awaiting a signature right now.',
@@ -227,9 +243,9 @@ class _X402ApprovalsScreenState extends State<X402ApprovalsScreen> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppColors.cardSurfacePure,
+        color: AppColors.surface,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: isExpired ? AppColors.blockBorder : AppColors.cardBorder),
+        border: Border.all(color: isExpired ? AppColors.blockBorder : AppColors.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -346,7 +362,7 @@ class _X402ApprovalsScreenState extends State<X402ApprovalsScreen> {
     final cubit = context.read<X402ApprovalsCubit>();
     showModalBottomSheet(
       context: context,
-      backgroundColor: AppColors.cardSurfacePure,
+      backgroundColor: AppColors.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
@@ -440,7 +456,7 @@ class _DiscoveredDevicesListState extends State<_DiscoveredDevicesList> {
     }
     return ListView.separated(
       itemCount: _devices.length,
-      separatorBuilder: (context, index) => const Divider(height: 1, color: AppColors.cardBorder),
+      separatorBuilder: (context, index) => const Divider(height: 1, color: AppColors.border),
       itemBuilder: (context, index) {
         final device = _devices[index];
         return ListTile(

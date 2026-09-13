@@ -1,55 +1,40 @@
 import 'package:flutter/material.dart';
 
-/// Centralized color palette for Chapter 2.
-/// Matches the visual reference layout and follows the ai_mentor design system pattern.
+/// Single accessible dark palette for Chapter 2. Every text token here is
+/// verified against [background], [surface] and [surfaceRaised] by
+/// `test/theme/contrast_test.dart`.
 class AppColors {
   AppColors._();
 
-  // Screen background (deep dark bezel framing)
-  static const Color screenBackground = Color(0xFF0D0F12);
-  static const Color screenBackgroundElevated = Color(0xFF14171C);
+  static const Color background = Color(0xFF0B0D10);
+  static const Color surface = Color(0xFF15181D);
+  static const Color surfaceRaised = Color(0xFF1D2127);
+  static const Color border = Color(0xFF2A2F37);
 
-  // Card surfaces (sculpted dual-card layout from visual reference)
-  static const Color cardSurface = Color(0xFFF4F5F7);
-  static const Color cardSurfacePure = Color(0xFFFFFFFF);
-  static const Color cardSurfaceMuted = Color(0xFFEAECF0);
-  static const Color cardBorder = Color(0xFFE4E7EC);
+  static const Color textPrimary = Color(0xFFF2F4F7);
+  static const Color textSecondary = Color(0xFFB4BCC8);
+  static const Color textMuted = Color(0xFF8A94A3);
 
-  // Floating middle action pill bar
-  static const Color actionPillBackground = Color(0xFF1E2024);
-  static const Color actionPillBorder = Color(0xFF2E3238);
-  static const Color actionPillForeground = Color(0xFFFFFFFF);
-  static const Color actionPillIconBackground = Color(0xFF2C3036);
+  static const Color primary = Color(0xFF7C83FF);
+  static const Color onPrimary = Color(0xFF0B0D10);
 
-  // Typography tokens (on light cards)
-  static const Color textPrimary = Color(0xFF0A0D12);
-  static const Color textSecondary = Color(0xFF414651);
-  static const Color textMuted = Color(0xFF717680);
-  static const Color textLight = Color(0xFFFFFFFF);
-  static const Color textLightMuted = Color(0xFF94A3B8);
+  static const Color allow = Color(0xFF32D583);
+  static const Color escalate = Color(0xFFFDB022);
+  static const Color block = Color(0xFFF97066);
 
-  // Tri-Verdict Semantic States
-  // 1. ALLOW (Calm, positive, autonomous execution)
-  static const Color allow = Color(0xFF12B76A);
-  static const Color allowBackground = Color(0xFFECFDF3);
-  static const Color allowBorder = Color(0xFFA6F4C5);
-  static const Color allowText = Color(0xFF027A48);
+  static const Color ledgerOrange = Color(0xFFFF7A2E);
 
-  // 2. ESCALATE (High-risk, human Face ID review required)
-  static const Color escalate = Color(0xFFF59E0B);
-  static const Color escalateBackground = Color(0xFFFEF0C7);
-  static const Color escalateBorder = Color(0xFFFEDF89);
-  static const Color escalateText = Color(0xFFB54708);
+  // Verdict badge fills/borders: decorative low-alpha tints of the verdict
+  // color, not subject to the text contrast rule.
+  static Color get allowBackground => allow.withValues(alpha: 0.16);
+  static Color get allowBorder => allow.withValues(alpha: 0.4);
+  static const Color allowText = allow;
 
-  // 3. BLOCK (Adversarial interception, definitively halted)
-  static const Color block = Color(0xFFF04438);
-  static const Color blockBackground = Color(0xFFFEE4E2);
-  static const Color blockBorder = Color(0xFFFECDCA);
-  static const Color blockText = Color(0xFFB42318);
+  static Color get escalateBackground => escalate.withValues(alpha: 0.16);
+  static Color get escalateBorder => escalate.withValues(alpha: 0.4);
+  static const Color escalateText = escalate;
 
-  // Brand and Networks
-  static const Color brandPrimary = Color(0xFF6366F1);
-  static const Color brandPrimarySubtle = Color(0xFFEEF2FF);
-  static const Color networkBase = Color(0xFF0052FF);
-  static const Color ledgerOrange = Color(0xFFFF5A00);
+  static Color get blockBackground => block.withValues(alpha: 0.16);
+  static Color get blockBorder => block.withValues(alpha: 0.4);
+  static const Color blockText = block;
 }

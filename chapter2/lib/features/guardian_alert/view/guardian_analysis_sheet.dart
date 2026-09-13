@@ -58,7 +58,7 @@ class GuardianAnalysisSheet extends StatelessWidget {
         bottom: MediaQuery.of(context).viewInsets.bottom + 28,
       ),
       decoration: const BoxDecoration(
-        color: AppColors.cardSurfacePure,
+        color: AppColors.surface,
         borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
       ),
       child: SingleChildScrollView(
@@ -71,7 +71,7 @@ class GuardianAnalysisSheet extends StatelessWidget {
                 width: 44,
                 height: 4,
                 decoration: BoxDecoration(
-                  color: AppColors.cardBorder,
+                  color: AppColors.border,
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
@@ -124,9 +124,9 @@ class GuardianAnalysisSheet extends StatelessWidget {
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: AppColors.cardSurface,
+                color: AppColors.surfaceRaised,
                 borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: AppColors.cardBorder),
+                border: Border.all(color: AppColors.border),
               ),
               child: Column(
                 children: [
@@ -136,9 +136,9 @@ class GuardianAnalysisSheet extends StatelessWidget {
                     '\$${action.amountDisplayUsdc.toStringAsFixed(2)} USDC',
                     isHighlight: true,
                   ),
-                  const Divider(height: 16, color: AppColors.cardBorder),
+                  const Divider(height: 16, color: AppColors.border),
                   _buildAnalysisRow(context, 'Purpose / Vendor', action.purpose),
-                  const Divider(height: 16, color: AppColors.cardBorder),
+                  const Divider(height: 16, color: AppColors.border),
                   _buildAnalysisRow(
                     context,
                     'Recipient Target',
@@ -146,7 +146,7 @@ class GuardianAnalysisSheet extends StatelessWidget {
                     isMonospace: true,
                     canCopy: true,
                   ),
-                  const Divider(height: 16, color: AppColors.cardBorder),
+                  const Divider(height: 16, color: AppColors.border),
                   _buildAnalysisRow(
                     context,
                     'Supervised Agent',
@@ -158,7 +158,7 @@ class GuardianAnalysisSheet extends StatelessWidget {
                     isMonospace: true,
                   ),
                   if (action.nonce != null) ...[
-                    const Divider(height: 16, color: AppColors.cardBorder),
+                    const Divider(height: 16, color: AppColors.border),
                     _buildAnalysisRow(
                       context,
                       'Safe Multisig Nonce',
@@ -222,13 +222,13 @@ class GuardianAnalysisSheet extends StatelessWidget {
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                   decoration: BoxDecoration(
-                    color: AppColors.cardSurface,
+                    color: AppColors.surfaceRaised,
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: AppColors.cardBorder),
+                    border: Border.all(color: AppColors.border),
                   ),
                   child: Row(
                     children: [
-                      const Icon(Icons.link_rounded, size: 16, color: AppColors.brandPrimary),
+                      const Icon(Icons.link_rounded, size: 16, color: AppColors.primary),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
@@ -236,7 +236,7 @@ class GuardianAnalysisSheet extends StatelessWidget {
                           style: AppTextStyles.mono(
                             context,
                             fontSize: 11,
-                            color: AppColors.brandPrimary,
+                            color: AppColors.primary,
                           ),
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -252,12 +252,12 @@ class GuardianAnalysisSheet extends StatelessWidget {
             ElevatedButton(
               onPressed: () => Navigator.of(context).pop(),
               style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.cardSurface,
+                backgroundColor: AppColors.surfaceRaised,
                 foregroundColor: AppColors.textPrimary,
                 padding: const EdgeInsets.symmetric(vertical: 14),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(16),
-                  side: const BorderSide(color: AppColors.cardBorder),
+                  side: const BorderSide(color: AppColors.border),
                 ),
                 elevation: 0,
               ),
@@ -320,7 +320,7 @@ class GuardianAnalysisSheet extends StatelessWidget {
                       SnackBar(
                         content: Text('Copied: $value'),
                         behavior: SnackBarBehavior.floating,
-                        backgroundColor: AppColors.actionPillBackground,
+                        backgroundColor: AppColors.surfaceRaised,
                       ),
                     );
                   },
@@ -343,9 +343,9 @@ class GuardianAnalysisSheet extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: AppColors.cardSurface,
+        color: AppColors.surfaceRaised,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.cardBorder),
+        border: Border.all(color: AppColors.border),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,

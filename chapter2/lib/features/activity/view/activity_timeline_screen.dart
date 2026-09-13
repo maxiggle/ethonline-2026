@@ -21,7 +21,7 @@ class _ActivityTimelineScreenState extends State<ActivityTimelineScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.screenBackground,
+      backgroundColor: AppColors.background,
       appBar: AppBar(
         title: Text(
           'Activity & Verdict Feed',
@@ -42,8 +42,8 @@ class _ActivityTimelineScreenState extends State<ActivityTimelineScreen> {
           final filteredActions = _filterActions(allActions);
 
           return RefreshIndicator(
-            color: AppColors.brandPrimary,
-            backgroundColor: AppColors.cardSurfacePure,
+            color: AppColors.primary,
+            backgroundColor: AppColors.surface,
             onRefresh: () async {
               await context.read<DashboardCubit>().loadDashboardMetrics();
             },
@@ -100,9 +100,9 @@ class _ActivityTimelineScreenState extends State<ActivityTimelineScreen> {
                     margin: const EdgeInsets.only(top: 40),
                     padding: const EdgeInsets.all(32),
                     decoration: BoxDecoration(
-                      color: AppColors.cardSurfacePure,
+                      color: AppColors.surface,
                       borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: AppColors.cardBorder),
+                      border: Border.all(color: AppColors.border),
                     ),
                     alignment: Alignment.center,
                     child: Column(
@@ -191,7 +191,7 @@ class _ActivityTimelineScreenState extends State<ActivityTimelineScreen> {
             decoration: BoxDecoration(
               color: isSelected
                   ? Colors.white.withValues(alpha: 0.25)
-                  : AppColors.cardBorder,
+                  : AppColors.border,
               borderRadius: BorderRadius.circular(10),
             ),
             child: Text(
@@ -204,12 +204,12 @@ class _ActivityTimelineScreenState extends State<ActivityTimelineScreen> {
           ),
         ],
       ),
-      selectedColor: AppColors.actionPillBackground,
-      backgroundColor: AppColors.cardSurfacePure,
+      selectedColor: AppColors.surfaceRaised,
+      backgroundColor: AppColors.surface,
       side: BorderSide(
         color: isSelected
-            ? AppColors.actionPillBackground
-            : AppColors.cardBorder,
+            ? AppColors.surfaceRaised
+            : AppColors.border,
       ),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       onSelected: (_) => setState(() => _currentFilter = filter),
@@ -241,9 +241,9 @@ class _ActivityTimelineScreenState extends State<ActivityTimelineScreen> {
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: AppColors.cardSurfacePure,
+          color: AppColors.surface,
           borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: AppColors.cardBorder),
+          border: Border.all(color: AppColors.border),
         ),
         child: Row(
           children: [

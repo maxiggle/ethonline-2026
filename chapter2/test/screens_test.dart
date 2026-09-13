@@ -1,15 +1,16 @@
 import 'package:chapter2/core/di/locator.dart';
 import 'package:chapter2/features/activity/view/activity_timeline_screen.dart';
-import 'package:chapter2/features/agents/view/agent_detail_screen.dart';
 import 'package:chapter2/features/auth/cubit/auth_cubit.dart';
 import 'package:chapter2/features/auth/cubit/auth_state.dart';
-import 'package:chapter2/features/auth/models/agent_model.dart';
 import 'package:chapter2/features/auth/models/user_identity.dart';
 import 'package:chapter2/features/auth/services/auth_service.dart';
 import 'package:chapter2/features/dashboard/cubit/dashboard_cubit.dart';
 import 'package:chapter2/features/guardian_alert/view/guardian_analysis_sheet.dart';
 import 'package:chapter2/features/settings/view/settings_screen.dart';
 import 'package:chapter2/features/timeline/models/treasury_action.dart';
+import 'package:chapter2/features/x402_approvals/cubit/x402_approvals_cubit.dart';
+import 'package:chapter2/features/x402_approvals/ledger/ledger_ble_client.dart';
+import 'package:chapter2/features/x402_approvals/remote/x402_approvals_api_service.dart';
 import 'package:chapter2/services/api/chapter2_api_service.dart';
 import 'package:chapter2/shared/theme/chapter2_theme.dart';
 import 'package:flutter/material.dart';
@@ -44,7 +45,7 @@ void main() {
     expect(find.text('Blocked'), findsOneWidget);
   });
 
-  testWidgets('AgentDetailScreen displays telemetry, kill switch, and protocols', (tester) async {
+  testWidgets('SettingsScreen displays account, backend and World ID sections', (tester) async {
     final authCubit = AuthCubit(authService: locator<AuthService>());
     authCubit.emit(const AuthState(
       status: AuthStatus.authenticated,
@@ -53,57 +54,18 @@ void main() {
         email: 'operator@chapter2.finance',
         walletAddress: '0xc97d5648b82cc733D566d252Bf33759B4b040c75',
       ),
-      agents: [
-        AgentModel(
-          id: 'agent_default_01',
-          userId: 'user_123',
-          agentAddress: '0x1111111111111111111111111111111111111111',
-          name: 'Treasury Worker #1',
-          safeAddress: '0x4f712dd78Cb1a504C69CB4f68B82Fddb6b3b1df6',
-          guardAddress: '0x9b6023D1B6D3b076C8d999Ba406AE486750ce7d3',
-        ),
-      ],
     ));
 
-    final dashboardCubit = DashboardCubit(apiService: locator<Chapter2ApiService>());
-
-    await tester.pumpWidget(
-      MultiBlocProvider(
-        providers: [
-          BlocProvider<AuthCubit>.value(value: authCubit),
-          BlocProvider<DashboardCubit>.value(value: dashboardCubit),
-        ],
-        child: MaterialApp(
-          theme: Chapter2Theme.darkTheme,
-          home: const AgentDetailScreen(),
-        ),
-      ),
+    final x402Cubit = X402ApprovalsCubit(
+      apiService: locator<X402ApprovalsApiService>(),
+      ledgerBleClient: locator<LedgerBleClient>(),
     );
-    await tester.pumpAndSettle();
-
-    expect(find.text('Supervised Agents & Mandates'), findsOneWidget);
-    expect(find.text('Treasury Worker #1'), findsOneWidget);
-    expect(find.text('Emergency Kill Switch'), findsOneWidget);
-    expect(find.text("Today's Operational Telemetry"), findsOneWidget);
-    expect(find.text('Authorized Interaction Protocols'), findsOneWidget);
-    expect(find.text('Google Cloud Vertex AI'), findsOneWidget);
-  });
-
-  testWidgets('SettingsScreen displays identity, contracts, and World ID verification', (tester) async {
-    final authCubit = AuthCubit(authService: locator<AuthService>());
-    authCubit.emit(const AuthState(
-      status: AuthStatus.authenticated,
-      user: UserIdentity(
-        id: 'user_123',
-        email: 'operator@chapter2.finance',
-        walletAddress: '0xc97d5648b82cc733D566d252Bf33759B4b040c75',
-      ),
-    ));
 
     await tester.pumpWidget(
       MultiBlocProvider(
         providers: [
           BlocProvider<AuthCubit>.value(value: authCubit),
+          BlocProvider<X402ApprovalsCubit>.value(value: x402Cubit),
         ],
         child: MaterialApp(
           theme: Chapter2Theme.darkTheme,
@@ -113,12 +75,11 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Settings & Infrastructure'), findsOneWidget);
-    expect(find.text('Connected Identity'), findsOneWidget);
-    expect(find.text('World ID Verification'), findsOneWidget);
-    expect(find.text('Smart Contract Infrastructure'), findsOneWidget);
-    expect(find.text('Ledger Hardware Signer'), findsOneWidget);
-    expect(find.text('Disconnect Session & Sign Out'), findsOneWidget);
+    expect(find.text('Settings'), findsOneWidget);
+    expect(find.text('Account'), findsOneWidget);
+    expect(find.text('Backend'), findsOneWidget);
+    expect(find.text('World ID'), findsOneWidget);
+    expect(find.text('Sign out'), findsOneWidget);
   });
 
   testWidgets('GuardianAnalysisSheet displays tri-verdict evaluations correctly', (tester) async {

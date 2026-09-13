@@ -1,8 +1,6 @@
 import 'package:chapter2/core/di/locator.dart';
-import 'package:chapter2/features/approval/cubit/approval_cubit.dart';
 import 'package:chapter2/features/auth/cubit/auth_cubit.dart';
 import 'package:chapter2/features/auth/services/auth_service.dart';
-import 'package:chapter2/features/bills/cubit/bills_cubit.dart';
 import 'package:chapter2/features/dashboard/cubit/dashboard_cubit.dart';
 import 'package:chapter2/features/x402_approvals/cubit/x402_approvals_cubit.dart';
 import 'package:chapter2/features/x402_approvals/remote/x402_approvals_api_service.dart';
@@ -37,14 +35,6 @@ class Chapter2App extends StatelessWidget {
           BlocProvider<DashboardCubit>(
             create: (ctx) =>
                 DashboardCubit(apiService: ctx.read<Chapter2ApiService>()),
-          ),
-          BlocProvider<ApprovalCubit>(
-            create: (ctx) =>
-                ApprovalCubit(apiService: ctx.read<Chapter2ApiService>()),
-          ),
-          BlocProvider<BillsCubit>(
-            create: (ctx) =>
-                BillsCubit(apiService: ctx.read<Chapter2ApiService>()),
           ),
           BlocProvider<X402ApprovalsCubit>(
             create: (ctx) => X402ApprovalsCubit(

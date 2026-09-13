@@ -339,6 +339,17 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             _buildMandateError(context)
           else
             _buildBindForm(context),
+          const SizedBox(height: 20),
+          Text(
+            "Only approving escalated payments on a Ledger? You don't need an agent.",
+            textAlign: TextAlign.center,
+            style: AppTextStyles.sm(context, color: AppColors.textSecondary),
+          ),
+          const SizedBox(height: 4),
+          TextButton(
+            onPressed: _isBindingAgent ? null : () => _goToStep(2),
+            child: const Text("Skip, I'm only approving"),
+          ),
         ],
       ),
     );

@@ -55,4 +55,16 @@ void main() {
     await pumpOnboardingStep(tester, 2);
     await expectLater(find.byType(OnboardingScreen), matchesGoldenFile('goldens/onboarding_step3_connect_ledger.png'));
   });
+
+  testWidgets('Onboarding step 2: an approver without an agent can skip to connecting the Ledger', (tester) async {
+    await pumpOnboardingStep(tester, 1);
+
+    final skipButton = find.text("Skip, I'm only approving");
+    await tester.ensureVisible(skipButton);
+    await tester.tap(skipButton);
+    await tester.pumpAndSettle();
+
+    expect(find.text('STEP 3 OF 3 · Connect Ledger'), findsOneWidget);
+    expect(find.text('Connect your Ledger approver'), findsOneWidget);
+  });
 }
